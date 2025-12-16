@@ -1,0 +1,8 @@
+[user]
+	name = Calle Stålhem
+	email = carl@stalhem.se
+	signingkey = /home/calle/.ssh/id_rsa.pub
+[gpg]
+	format = ssh
+[commit]
+	gpgsign = true

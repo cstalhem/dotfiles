@@ -1,0 +1,33 @@
+#!/bin/bash
+
+#
+# 00-header - MOTD Header with ASCII art hostname
+# Part of custom MOTD dashboard
+#
+
+# Configuration
+NICKNAME="Home Server"
+
+# Colors
+readonly CYAN='\e[36m'
+readonly DIM='\e[2m'
+readonly RESET='\e[0m'
+
+# Get system info
+FORMAL_HOSTNAME=$(hostname -f 2>/dev/null || hostname)
+OS_INFO=$(lsb_release -ds 2>/dev/null || cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2)
+KERNEL_INFO=$(uname -srm)
+
+# Print ASCII art banner in cyan
+echo ""
+echo -e "${CYAN}"
+figlet -f banner "$NICKNAME" 2>/dev/null || echo "$NICKNAME"
+echo -e "${RESET}"
+
+# Print formal hostname
+echo -e "                         ${DIM}(${FORMAL_HOSTNAME})${RESET}"
+echo ""
+
+# Print welcome line
+echo -e "Welcome to ${OS_INFO} (${KERNEL_INFO})"
+echo ""

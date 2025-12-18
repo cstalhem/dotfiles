@@ -16,18 +16,13 @@ readonly RESET='\e[0m'
 # Get system info
 FORMAL_HOSTNAME=$(hostname -f 2>/dev/null || hostname)
 OS_INFO=$(lsb_release -ds 2>/dev/null || cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2)
-KERNEL_INFO=$(uname -srm)
+KERNEL_INFO=$(uname -sr)
 
 # Print ASCII art banner in cyan
 echo ""
-echo -e "${CYAN}"
-figlet -f banner "$NICKNAME" 2>/dev/null || echo "$NICKNAME"
-echo -e "${RESET}"
-
-# Print formal hostname
-echo -e "                         ${DIM}(${FORMAL_HOSTNAME})${RESET}"
-echo ""
-
-# Print welcome line
-echo -e "Welcome to ${OS_INFO} (${KERNEL_INFO})"
-echo ""
+echo -e "┌─[${CYAN} ${FORMAL_HOSTNAME} ${RESET}]────────────────────────────────────────────────┐"
+echo "│                                                         │"
+echo "│     $NICKNAME                                        │"
+echo "│     ${OS_INFO}  •  ${KERNEL_INFO}      │"
+echo "│                                                         │"
+echo "└─────────────────────────────────────────────────────────┘"

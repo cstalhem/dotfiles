@@ -222,14 +222,14 @@ print_section_header "$ICON_HEALTH" "SYSTEM HEALTH"
 # ------------------------------------------------------------------------------
 
 if [ -f /var/run/reboot-required ]; then
-    local_reason=""
+    reboot_reason=""
     if [ -f /var/run/reboot-required.pkgs ]; then
-        local_reason=$(head -1 /var/run/reboot-required.pkgs 2>/dev/null)
-        if [ -n "$local_reason" ]; then
-            local_reason=" (${local_reason})"
+        reboot_reason=$(head -1 /var/run/reboot-required.pkgs 2>/dev/null)
+        if [ -n "$reboot_reason" ]; then
+            reboot_reason=" (${reboot_reason})"
         fi
     fi
-    echo -e "${INDENT}${YELLOW}${ICON_REBOOT} Reboot required${local_reason}${RESET}"
+    echo -e "${INDENT}${YELLOW}${ICON_REBOOT} Reboot required${reboot_reason}${RESET}"
     echo ""
 fi
 

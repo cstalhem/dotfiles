@@ -28,6 +28,10 @@ declare -A MOUNT_LABELS=(
     ["/mnt/media_data"]="/mnt/media_data"
 )
 
+# Public IP cache settings
+PUBLIC_IP_CACHE_FILE="/tmp/.motd_public_ip_cache"
+PUBLIC_IP_CACHE_TTL=900  # 15 minutes in seconds
+
 # ==============================================================================
 # Helper Functions
 # ==============================================================================
@@ -182,9 +186,28 @@ get_tailscale_ip() {
     fi
 }
 
-# Get public IP with timeout
+# Get public IP with caching to avoid repeated network calls
 get_public_ip() {
-    curl -s --max-time 2 ipinfo.io/ip 2>/dev/null
+    local cache_file="$PUBLIC_IP_CACHE_FILE"
+    local cache_ttl="$PUBLIC_IP_CACHE_TTL"
+
+    # Check if cache exists and is still valid
+    if [ -f "$cache_file" ]; then
+        local cache_age
+        cache_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0)))
+        if [ "$cache_age" -lt "$cache_ttl" ]; then
+            cat "$cache_file"
+            return 0
+        fi
+    fi
+
+    # Fetch fresh IP and update cache
+    local ip
+    ip=$(curl -s --max-time 2 ipinfo.io/ip 2>/dev/null)
+    if [ -n "$ip" ]; then
+        echo "$ip" > "$cache_file" 2>/dev/null
+        echo "$ip"
+    fi
 }
 
 # ==============================================================================
@@ -284,7 +307,7 @@ fi
 # Tailscale IP
 tailscale_ip=$(get_tailscale_ip)
 if [ -n "$tailscale_ip" ]; then
-    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Tailnet IP:")${RESET} ${CYAN}${tailscale_ip}${RESET}"
+    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Tailnet IP:")${RESET} ${CYAN}${tailscale_ip}${RESET}  ${GREEN}${ICON_OK} Connected${RESET}"
 else
     echo -e "${INDENT2}${DIM}$(printf '%-20s' "Tailnet IP:")${RESET} ${YELLOW}Not connected${RESET}"
 fi

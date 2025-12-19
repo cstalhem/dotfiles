@@ -406,26 +406,26 @@ Comprehensive system health overview including reboot status, resource utilizati
 
 ```
 ───────────────────────────────────────────────────────────
-󰋑  SYSTEM HEALTH
+󰗶  SYSTEM HEALTH
 
-     Reboot required (kernel update)
+     Reboot required (kernel update)
 
-     UPTIME & LOAD                           [  Healthy ]
+     UPTIME & LOAD                           [  Healthy ]
       System uptime:      25 days 9 hours
       Load average:       0.42 (1m)  0.38 (5m)  0.35 (15m)
       Processes:          243 active
 
-   󰍛 MEMORY
+    󰍛 MEMORY
       RAM                 [██████████░░░░░]  62%     10.8 / 16 GB
       Swap                [░░░░░░░░░░░░░░░]   0%      0.0 / 4 GB
 
-    STORAGE
+    󰋊 STORAGE
       /                   [██░░░░░░░░░░░░░]  31%     65.8 / 438 GB
-      /mnt/media_data    [██████████████░]  89%    801.2 / 900 GB
+       /mnt/media_data   [██████████████░]  89%    801.2 / 900 GB
 
-    NETWORK
-      Local IP:           192.168.1.10                     
-      Tailnet IP:         100.123.12.321             
+    󰲝 NETWORK
+      Local IP:           192.168.1.10               
+      Tailnet IP:         100.123.12.321             
       Public IP:          81.234.56.78
 ```
 
@@ -496,6 +496,7 @@ Data source: `df -B1` for byte-accurate values
 
 Display rules:
 - IPs shown in cyan
+- Show `{ICON_OK} Connected` next to IP for Local and Tailnet
 - Cache public IP if possible (slow to fetch)
 - If any IP unavailable, show fallback message in yellow
 
@@ -522,11 +523,11 @@ Show available system updates with special attention to security updates and Ubu
 ───────────────────────────────────────────────────────────
 󰏖  UPDATES
 
-     Ubuntu 24.10 available for upgrade
+    Ubuntu 24.10 available for upgrade
 
-     23 package updates available
-      • 5 security updates
-      • 18 standard updates
+   󰏖 23 package updates available
+       5 security updates
+      󰏖 18 standard updates
 
    Most recent packages: docker-ce, tailscale, libgnu-4
 
@@ -543,7 +544,7 @@ Show available system updates with special attention to security updates and Ubu
 ───────────────────────────────────────────────────────────
 󰏖  UPDATES
 
-     System is up to date
+    System is up to date
 ```
 
 #### Display Rules
@@ -586,18 +587,18 @@ Overview of Docker container fleet with health status breakdown.
 
 ```
 ───────────────────────────────────────────────────────────
-  DOCKER
+󰡨 DOCKER
 
    Containers
       Running:            28
       Stopped:             3
       
       Health status:
-        Healthy:         19  
-        Unhealthy:        1
+         Healthy:         19  
+         Unhealthy:        1
       No healthcheck:     11
       
-        Unhealthy:
+      Unhealthy:
          portainer, traefik, pihole
 ```
 
@@ -605,15 +606,24 @@ Overview of Docker container fleet with health status breakdown.
 
 ```
 ───────────────────────────────────────────────────────────
-  DOCKER
+󰡨 DOCKER
 
    Containers
       Running:            28
       Stopped:             0
       
       Health status:
-        Healthy:         19  
+         Healthy:         19  
       No healthcheck:      9
+```
+
+##### Docker not running
+
+```
+───────────────────────────────────────────────────────────
+󰡨 DOCKER
+
+    Docker not running
 ```
 
 #### Container State Definitions
@@ -636,7 +646,6 @@ Relationship: `Running = Healthy + Unhealthy + No healthcheck`
 | Stopped > 0 | Show count in yellow |
 | Healthy > 0 | Show count in green with nf-fa-check |
 | Docker not running | Show error: "Docker daemon not running" in red |
-| Docker not installed | Skip section entirely |
 
 #### Unhealthy Container List
 

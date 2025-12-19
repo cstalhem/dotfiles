@@ -29,16 +29,17 @@ readonly WIDTH=60
 readonly INDENT="   "
 readonly INDENT2="      "
 readonly INDENT3="         "
-readonly LABEL_WIDTH=18
+readonly LABEL_WIDTH=20
 
 # ==============================================================================
 # Status Icons (Nerd Font)
 # ==============================================================================
 
-readonly ICON_OK=$''                 # nf-fa-check
-readonly ICON_WARN=$''               # nf-fa-warning
-readonly ICON_ERROR=$''              # nf-fa-times_circle
-readonly ICON_STOPPED=$''            # nf-oct-circle_slash
+readonly ICON_OK=$''                 # nf-fa-check
+readonly ICON_WARN=$''               # nf-fa-warning
+readonly ICON_ERROR=$''              # nf-fa-times_circle
+readonly ICON_STOPPED=$''            # nf-oct-circle_slash
+readonly ICON_REFRESH=$''            # nf-fa-refresh
 
 # ==============================================================================
 # Section Icons (Nerd Font)
@@ -47,23 +48,23 @@ readonly ICON_STOPPED=$''            # nf-oct-circle_slash
 readonly ICON_HEALTH=$'󰗶'             # nf-md-heart_pulse
 readonly ICON_UPDATES=$'󰏖'            # nf-md-package_variant
 readonly ICON_DOCKER=$'󰡨'             # nf-md-docker
-readonly ICON_USERS=$''              # nf-fa-users
+readonly ICON_USERS=$''              # nf-fa-users
 
 # ==============================================================================
 # Detail Icons (Nerd Font)
 # ==============================================================================
 
-readonly ICON_CLOCK=$''              # nf-fa-clock_o
+readonly ICON_CLOCK=$''              # nf-fa-clock_o
 readonly ICON_MEMORY=$'󰍛'             # nf-md-memory
 readonly ICON_DISK=$'󰋊'               # nf-md-harddisk
 readonly ICON_NETWORK=$'󰲝'            # nf-md-network
 readonly ICON_REBOOT=$'󰜉'             # nf-md-restart
-readonly ICON_UPGRADE=$''            # nf-fa-arrow_circle_o_up
-readonly ICON_CONTAINER=$''          # nf-oct-container
-readonly ICON_USER=$''               # nf-fa-user
-readonly ICON_BAN=$''                # nf-fa-ban
-readonly ICON_HISTORY=$''            # nf-fa-history
-readonly ICON_SECURITY=$''           # nf-fa-shield
+readonly ICON_UPGRADE=$''            # nf-fa-arrow_circle_o_up
+readonly ICON_CONTAINER=$''          # nf-oct-container
+readonly ICON_USER=$''               # nf-fa-user
+readonly ICON_BAN=$''                # nf-fa-ban
+readonly ICON_HISTORY=$''            # nf-fa-history
+readonly ICON_SECURITY=$''           # nf-fa-shield
 
 # ==============================================================================
 # Functions

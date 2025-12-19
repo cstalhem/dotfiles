@@ -22,6 +22,12 @@ source "${SCRIPT_DIR}/lib/common.sh"
 # Mount points to monitor
 MOUNT_POINTS=("/" "/mnt/media_data")
 
+# Labels for mount points (falls back to mount path if undefined)
+declare -A MOUNT_LABELS=(
+    ["/"]="/"
+    ["/mnt/media_data"]="/mnt/media_data"
+)
+
 # ==============================================================================
 # Helper Functions
 # ==============================================================================
@@ -115,7 +121,7 @@ print_memory_line() {
     local bar
     bar=$(progress_bar "$percent" "$warn_threshold" "$crit_threshold")
 
-    echo -e "${INDENT2}$(printf '%-18s' "$label") ${bar}     ${used_gb} / ${total_gb} GB"
+    echo -e "${INDENT2}$(printf '%-${LABEL_WIDTH}s' "$label") ${bar}     ${used_gb} / ${total_gb} GB"
 }
 
 # Print storage line with progress bar
@@ -154,7 +160,9 @@ print_storage_line() {
     local bar
     bar=$(progress_bar "$percent")
 
-    echo -e "${INDENT2}${warn_icon}$(printf '%-15s' "$mount_point") ${bar}    ${used_gb} / ${total_gb} GB"
+    local label=${MOUNT_LABELS[$mount_point]:-$mount_point}
+
+    echo -e "${INDENT2}${warn_icon}$(printf '%-${LABEL_WIDTH}s' "$label") ${bar}    ${used_gb} / ${total_gb} GB"
 }
 
 # Get local IP address

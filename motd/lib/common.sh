@@ -71,19 +71,22 @@ readonly ICON_SECURITY=$''           # nf-fa-shield
 # ==============================================================================
 
 # Generate a progress bar with color based on percentage
-# Usage: progress_bar <percentage>
+# Usage: progress_bar <percentage> [warn_threshold] [crit_threshold]
+# Default thresholds: warn=70, crit=85
 # Output: [██████████░░░░░]  62%
 progress_bar() {
     local percent=$1
+    local warn_threshold=${2:-70}
+    local crit_threshold=${3:-85}
     local width=15
     local filled=$((percent * width / 100))
     local empty=$((width - filled))
 
     # Determine color based on percentage
     local color
-    if [ "$percent" -ge 85 ]; then
+    if [ "$percent" -ge "$crit_threshold" ]; then
         color="$RED"
-    elif [ "$percent" -ge 70 ]; then
+    elif [ "$percent" -ge "$warn_threshold" ]; then
         color="$YELLOW"
     else
         color="$GREEN"

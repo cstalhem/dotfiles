@@ -642,9 +642,9 @@ Relationship: `Running = Healthy + Unhealthy + No healthcheck`
 
 | Condition | Behavior |
 |-----------|----------|
-| Unhealthy > 0 | Show count in red with nf-fa-times_circle, list container names |
 | Stopped > 0 | Show count in yellow |
 | Healthy > 0 | Show count in green with nf-fa-check |
+| Unhealthy > 0 | Show count in red with nf-fa-times_circle, list container names |
 | Docker not running | Show error: "Docker daemon not running" in red |
 
 #### Unhealthy Container List

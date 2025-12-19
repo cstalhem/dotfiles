@@ -256,7 +256,7 @@ printf "${INDENT2}${DIM}%-${LABEL_WIDTH}s${RESET} %s (1m)  %s (5m)  %s (15m)\n" 
 # Print process count (extract running/total from /proc/loadavg)
 running_procs=$(echo "$procs" | cut -d'/' -f1)
 total_procs=$(echo "$procs" | cut -d'/' -f2)
-print_line "Processes:" "${total_procs} active" "$INDENT2"
+print_line "Processes:" "${running_procs} running / ${total_procs} total" "$INDENT2"
 
 echo ""
 

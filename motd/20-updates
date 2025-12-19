@@ -1,0 +1,171 @@
+#!/bin/bash
+
+#
+# 20-updates - MOTD section showing available system updates
+# Part of custom MOTD dashboard
+#
+
+SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
+
+if [ -r "$COMMON_LIB" ]; then
+    # shellcheck source=/dev/null
+    source "$COMMON_LIB"
+else
+    # Fallback definitions to avoid failures if lib is missing
+    RESET='\e[0m'
+    RED='\e[31m'
+    GREEN='\e[32m'
+    YELLOW='\e[33m'
+    CYAN='\e[36m'
+    WHITE='\e[1;37m'
+    ICON_UPDATES='󰏖'
+    ICON_UPGRADE=''
+    ICON_SECURITY=''
+    ICON_OK=''
+    ICON_WARN=''
+    INDENT="   "
+    INDENT2="      "
+    INDENT3="         "
+    WIDTH=60
+
+    print_section_header() {
+        echo ""
+        printf '%s\n' "$(printf '─%.0s' $(seq 1 $WIDTH))"
+        echo -e "${WHITE}${1}  ${2}${RESET}"
+        echo ""
+    }
+
+    print_line() {
+        local label="$1"
+        local value="$2"
+        local indent="${3:-$INDENT}"
+        printf "%s${label} %s\n" "$indent" "$value"
+    }
+
+    command_exists() {
+        command -v "$1" &>/dev/null
+    }
+fi
+
+# ==============================================================================
+# Helper functions
+# ==============================================================================
+
+get_upgrade_version() {
+    local upgrade_file="/var/lib/update-notifier/release-upgrade-available"
+
+    if [ -s "$upgrade_file" ]; then
+        local version
+        version=$(grep -oP 'Ubuntu \K[0-9.]*' "$upgrade_file" | head -n1)
+        echo "${version:-available}"
+        return 0
+    fi
+
+    if command_exists do-release-upgrade; then
+        local output
+        output=$(do-release-upgrade -c 2>/dev/null | grep -i "new release")
+        if [ -n "$output" ]; then
+            local version
+            version=$(echo "$output" | grep -oP '\\d+\\.\\d+')
+            echo "${version:-available}"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+get_update_count() {
+    if ! command_exists apt-get; then
+        echo "0"
+        return
+    fi
+
+    apt-get -s upgrade 2>/dev/null | grep -c "^Inst"
+}
+
+get_security_count() {
+    local updates_file="/var/lib/update-notifier/updates-available"
+
+    if [ -r "$updates_file" ]; then
+        local count
+        count=$(grep -i "security" "$updates_file" | grep -Eo '\\d+' | head -n1)
+        echo "${count:-0}"
+        return
+    fi
+
+    if command_exists apt-get; then
+        apt-get -s upgrade 2>/dev/null | grep "^Inst" | grep -ci "security"
+        return
+    fi
+
+    echo "0"
+}
+
+get_recent_packages() {
+    if ! command_exists apt; then
+        return
+    fi
+
+    local packages
+    packages=$(apt list --upgradable 2>/dev/null | tail -n +2 | cut -d'/' -f1 | head -3 | paste -sd ", ")
+    echo "$packages"
+}
+
+# ==============================================================================
+# Data collection
+# ==============================================================================
+
+upgrade_version=""
+if upgrade_version=$(get_upgrade_version); then
+    UPGRADE_AVAILABLE=true
+else
+    UPGRADE_AVAILABLE=false
+fi
+
+update_count=$(get_update_count)
+security_count=$(get_security_count)
+if [ "$security_count" -gt "$update_count" ]; then
+    security_count=$update_count
+fi
+standard_count=$((update_count - security_count))
+recent_packages=$(get_recent_packages)
+
+# ==============================================================================
+# Output
+# ==============================================================================
+
+print_section_header "$ICON_UPDATES" "UPDATES"
+
+if [ "$update_count" -gt 0 ]; then
+    if [ "$UPGRADE_AVAILABLE" = true ]; then
+        echo -e "${INDENT}${YELLOW}${ICON_UPGRADE} Ubuntu ${upgrade_version} available for upgrade${RESET}"
+        echo ""
+    fi
+
+    echo -e "${INDENT}${ICON_UPDATES} ${update_count} package updates available"
+
+    if [ "$security_count" -gt 0 ]; then
+        echo -e "${INDENT2}${RED}${ICON_SECURITY} ${security_count} security updates${RESET}"
+    fi
+
+    if [ "$standard_count" -gt 0 ]; then
+        echo -e "${INDENT2}${YELLOW}${ICON_UPDATES} ${standard_count} standard updates${RESET}"
+    fi
+
+    if [ -n "$recent_packages" ]; then
+        echo ""
+        echo -e "${INDENT}Most recent packages: ${CYAN}${recent_packages}${RESET}"
+    fi
+
+    echo ""
+    echo -e "${INDENT}To view updates:"
+    print_line "Security only:" "apt list --upgradable | grep -i security" "$INDENT2"
+    print_line "All updates:" "apt list --upgradable" "$INDENT2"
+
+    echo ""
+    print_line "Install all updates:" "sudo apt update && sudo apt upgrade"
+else
+    echo -e "${INDENT}${GREEN}${ICON_OK} System is up to date${RESET}"
+fi

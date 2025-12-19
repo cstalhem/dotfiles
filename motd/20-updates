@@ -8,45 +8,12 @@
 SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
 
-if [ -r "$COMMON_LIB" ]; then
-    # shellcheck source=/dev/null
-    source "$COMMON_LIB"
-else
-    # Fallback definitions to avoid failures if lib is missing
-    RESET='\e[0m'
-    RED='\e[31m'
-    GREEN='\e[32m'
-    YELLOW='\e[33m'
-    CYAN='\e[36m'
-    WHITE='\e[1;37m'
-    ICON_UPDATES='󰏖'
-    ICON_UPGRADE=''
-    ICON_SECURITY=''
-    ICON_OK=''
-    ICON_WARN=''
-    INDENT="   "
-    INDENT2="      "
-    INDENT3="         "
-    WIDTH=60
-
-    print_section_header() {
-        echo ""
-        printf '%s\n' "$(printf '─%.0s' $(seq 1 $WIDTH))"
-        echo -e "${WHITE}${1}  ${2}${RESET}"
-        echo ""
-    }
-
-    print_line() {
-        local label="$1"
-        local value="$2"
-        local indent="${3:-$INDENT}"
-        printf "%s${label} %s\n" "$indent" "$value"
-    }
-
-    command_exists() {
-        command -v "$1" &>/dev/null
-    }
+if [ ! -r "$COMMON_LIB" ]; then
+    exit 0
 fi
+
+# shellcheck source=/dev/null
+source "$COMMON_LIB"
 
 # ==============================================================================
 # Helper functions

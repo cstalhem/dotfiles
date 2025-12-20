@@ -721,11 +721,11 @@ Security-focused view of current sessions, failed login attempts, and recent log
 ───────────────────────────────────────────────────────────
  USERS & LOGINS
 
-   Active sessions:            2
+   Active sessions:               2
          calle @ 192.168.1.50     Mon Dec 16 14:22
          admin @ console          Mon Dec 16 08:00
 
-     Recent activity:
+   Recent activity:
          admin                    Mon Dec 16 14:23  →  present
          calle                    Mon Dec 16 09:15  →  12:33  (3h 18m)
          backup                   Sun Dec 15 02:00  →  02:15  (15m)
@@ -791,6 +791,8 @@ The MOTD scripts are stored in the chezmoi source directory and deployed via a r
 ```
 ~/.local/share/chezmoi/
 ├── motd/
+│   ├── lib/
+│   │   └── common.sh         # Shared functions, colors, icons
 │   ├── 00-header
 │   ├── 10-system-health
 │   ├── 20-updates

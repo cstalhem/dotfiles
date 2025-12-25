@@ -1,0 +1,321 @@
+#!/bin/bash
+
+#
+# 10-system-health - System Health Overview
+# Part of custom MOTD dashboard
+#
+# Displays: Reboot status, Uptime & Load, Memory, Storage, Network
+#
+
+# ==============================================================================
+# Source common functions
+# ==============================================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
+# ==============================================================================
+# Configuration
+# ==============================================================================
+
+# Mount points to monitor
+MOUNT_POINTS=("/" "/mnt/media_data")
+
+# Labels for mount points (falls back to mount path if undefined)
+declare -A MOUNT_LABELS=(
+    ["/"]="/"
+    ["/mnt/media_data"]="/mnt/media_data"
+)
+
+# Public IP cache settings
+PUBLIC_IP_CACHE_FILE="/tmp/.motd_public_ip_cache"
+PUBLIC_IP_CACHE_TTL=900  # 15 minutes in seconds
+
+# ==============================================================================
+# Helper Functions
+# ==============================================================================
+
+# Get formatted uptime string
+get_uptime() {
+    local uptime_seconds
+    uptime_seconds=$(cut -d. -f1 /proc/uptime)
+
+    local days=$((uptime_seconds / 86400))
+    local hours=$(((uptime_seconds % 86400) / 3600))
+
+    if [ "$days" -gt 0 ]; then
+        echo "${days} days ${hours} hours"
+    else
+        local minutes=$(((uptime_seconds % 3600) / 60))
+        echo "${hours} hours ${minutes} minutes"
+    fi
+}
+
+# Get load health badge
+get_load_badge() {
+    local load_1m=$1
+    local cpu_cores
+    cpu_cores=$(nproc)
+
+    # Calculate load per core (multiply by 100 for integer math)
+    local load_per_core
+    load_per_core=$(awk "BEGIN {printf \"%.2f\", $load_1m / $cpu_cores}")
+
+    # Compare using awk for floating point
+    local status
+    status=$(awk "BEGIN {
+        if ($load_per_core >= 1.00) print \"high\"
+        else if ($load_per_core >= 0.70) print \"elevated\"
+        else print \"healthy\"
+    }")
+
+    case "$status" in
+        "high")
+            echo -e "${RED}[ ${ICON_ERROR} High ]${RESET}"
+            ;;
+        "elevated")
+            echo -e "${YELLOW}[ ${ICON_WARN} Elevated ]${RESET}"
+            ;;
+        *)
+            echo -e "${GREEN}[ ${ICON_OK} Healthy ]${RESET}"
+            ;;
+    esac
+}
+
+# Get memory info from /proc/meminfo
+get_memory_info() {
+    local type=$1  # "ram" or "swap"
+
+    if [ "$type" = "ram" ]; then
+        local total used
+        total=$(grep '^MemTotal:' /proc/meminfo | awk '{print $2 * 1024}')
+        local available
+        available=$(grep '^MemAvailable:' /proc/meminfo | awk '{print $2 * 1024}')
+        used=$((total - available))
+        echo "$used $total"
+    else
+        local total used
+        total=$(grep '^SwapTotal:' /proc/meminfo | awk '{print $2 * 1024}')
+        local free
+        free=$(grep '^SwapFree:' /proc/meminfo | awk '{print $2 * 1024}')
+        used=$((total - free))
+        echo "$used $total"
+    fi
+}
+
+# Print memory line with progress bar
+print_memory_line() {
+    local label=$1
+    local used=$2
+    local total=$3
+    local warn_threshold=${4:-70}
+    local crit_threshold=${5:-85}
+
+    local percent=0
+    if [ "$total" -gt 0 ]; then
+        percent=$((used * 100 / total))
+    fi
+
+    local used_gb total_gb
+    used_gb=$(bytes_to_gb "$used")
+    total_gb=$(bytes_to_gb "$total")
+
+    # Use progress_bar from common.sh
+    local bar
+    bar=$(progress_bar "$percent" "$warn_threshold" "$crit_threshold")
+
+    echo -e "${INDENT2}$(printf '%-${LABEL_WIDTH}s' "$label") ${bar}     ${used_gb} / ${total_gb} GB"
+}
+
+# Print storage line with progress bar
+print_storage_line() {
+    local mount_point=$1
+
+    # Check if mount point exists
+    if ! df "$mount_point" &>/dev/null; then
+        return 1
+    fi
+
+    # Get disk info using df -B1 for byte-accurate values
+    local df_output
+    df_output=$(df -B1 "$mount_point" 2>/dev/null | tail -1)
+
+    local total used
+    total=$(echo "$df_output" | awk '{print $2}')
+    used=$(echo "$df_output" | awk '{print $3}')
+
+    local percent=0
+    if [ "$total" -gt 0 ]; then
+        percent=$((used * 100 / total))
+    fi
+
+    local used_gb total_gb
+    used_gb=$(bytes_to_gb "$used")
+    total_gb=$(bytes_to_gb "$total")
+
+    # Determine warning icon
+    local warn_icon=""
+    if [ "$percent" -ge 70 ]; then
+        warn_icon="${ICON_WARN} "
+    fi
+
+    # Use progress_bar from common.sh
+    local bar
+    bar=$(progress_bar "$percent")
+
+    local label=${MOUNT_LABELS[$mount_point]:-$mount_point}
+
+    echo -e "${INDENT2}${warn_icon}$(printf '%-${LABEL_WIDTH}s' "$label") ${bar}    ${used_gb} / ${total_gb} GB"
+}
+
+# Get local IP address
+get_local_ip() {
+    local ip
+    ip=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[\d.]+' | head -1)
+    if [ -z "$ip" ]; then
+        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+    echo "$ip"
+}
+
+# Get Tailscale IP
+get_tailscale_ip() {
+    if command_exists tailscale; then
+        tailscale ip -4 2>/dev/null
+    fi
+}
+
+# Get public IP with caching to avoid repeated network calls
+get_public_ip() {
+    local cache_file="$PUBLIC_IP_CACHE_FILE"
+    local cache_ttl="$PUBLIC_IP_CACHE_TTL"
+
+    # Check if cache exists and is still valid
+    if [ -f "$cache_file" ]; then
+        local cache_age
+        cache_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0)))
+        if [ "$cache_age" -lt "$cache_ttl" ]; then
+            cat "$cache_file"
+            return 0
+        fi
+    fi
+
+    # Fetch fresh IP and update cache
+    local ip
+    ip=$(curl -s --max-time 2 ipinfo.io/ip 2>/dev/null)
+    if [ -n "$ip" ]; then
+        echo "$ip" > "$cache_file" 2>/dev/null
+        echo "$ip"
+    fi
+}
+
+# ==============================================================================
+# Main Output
+# ==============================================================================
+
+# Print section header
+print_section_header "$ICON_HEALTH" "SYSTEM HEALTH"
+
+# ------------------------------------------------------------------------------
+# Reboot Required (Conditional)
+# ------------------------------------------------------------------------------
+
+if [ -f /var/run/reboot-required ]; then
+    reboot_reason=""
+    if [ -f /var/run/reboot-required.pkgs ]; then
+        reboot_reason=$(head -1 /var/run/reboot-required.pkgs 2>/dev/null)
+        if [ -n "$reboot_reason" ]; then
+            reboot_reason=" (${reboot_reason})"
+        fi
+    fi
+    echo -e "${INDENT}${YELLOW}${ICON_REBOOT} Reboot required${reboot_reason}${RESET}"
+    echo ""
+fi
+
+# ------------------------------------------------------------------------------
+# Uptime & Load
+# ------------------------------------------------------------------------------
+
+# Get load averages
+read -r load_1m load_5m load_15m procs _ < /proc/loadavg
+
+# Get load badge
+badge=$(get_load_badge "$load_1m")
+
+# Print subsection header with badge
+printf "${INDENT}${ICON_CLOCK} ${WHITE}UPTIME & LOAD${RESET}%*s%s\n" 26 "" "$badge"
+
+# Print uptime
+uptime_str=$(get_uptime)
+print_line "System uptime:" "$uptime_str" "$INDENT2"
+
+# Print load averages
+printf "${INDENT2}${DIM}%-${LABEL_WIDTH}s${RESET} %s (1m)  %s (5m)  %s (15m)\n" "Load average:" "$load_1m" "$load_5m" "$load_15m"
+
+# Print process count (extract running/total from /proc/loadavg)
+running_procs=$(echo "$procs" | cut -d'/' -f1)
+total_procs=$(echo "$procs" | cut -d'/' -f2)
+print_line "Processes:" "${running_procs} running / ${total_procs} total" "$INDENT2"
+
+echo ""
+
+# ------------------------------------------------------------------------------
+# Memory
+# ------------------------------------------------------------------------------
+
+echo -e "${INDENT}${ICON_MEMORY} ${WHITE}MEMORY${RESET}"
+
+# RAM usage
+read -r ram_used ram_total <<< "$(get_memory_info ram)"
+print_memory_line "RAM" "$ram_used" "$ram_total" 70 85
+
+# Swap usage (with different thresholds)
+read -r swap_used swap_total <<< "$(get_memory_info swap)"
+if [ "$swap_total" -gt 0 ]; then
+    print_memory_line "Swap" "$swap_used" "$swap_total" 50 75
+fi
+
+echo ""
+
+# ------------------------------------------------------------------------------
+# Storage
+# ------------------------------------------------------------------------------
+
+echo -e "${INDENT}${ICON_DISK} ${WHITE}STORAGE${RESET}"
+
+for mount_point in "${MOUNT_POINTS[@]}"; do
+    print_storage_line "$mount_point"
+done
+
+echo ""
+
+# ------------------------------------------------------------------------------
+# Network
+# ------------------------------------------------------------------------------
+
+echo -e "${INDENT}${ICON_NETWORK} ${WHITE}NETWORK${RESET}"
+
+# Local IP
+local_ip=$(get_local_ip)
+if [ -n "$local_ip" ]; then
+    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Local IP:")${RESET} ${CYAN}${local_ip}${RESET}"
+else
+    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Local IP:")${RESET} ${YELLOW}Unable to detect${RESET}"
+fi
+
+# Tailscale IP
+tailscale_ip=$(get_tailscale_ip)
+if [ -n "$tailscale_ip" ]; then
+    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Tailnet IP:")${RESET} ${CYAN}${tailscale_ip}${RESET}  ${GREEN}${ICON_OK} Connected${RESET}"
+else
+    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Tailnet IP:")${RESET} ${YELLOW}Not connected${RESET}"
+fi
+
+# Public IP
+public_ip=$(get_public_ip)
+if [ -n "$public_ip" ]; then
+    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Public IP:")${RESET} ${CYAN}${public_ip}${RESET}"
+else
+    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Public IP:")${RESET} ${YELLOW}Unable to detect${RESET}"
+fi

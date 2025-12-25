@@ -125,7 +125,7 @@ print_memory_line() {
     local bar
     bar=$(progress_bar "$percent" "$warn_threshold" "$crit_threshold")
 
-    echo -e "${INDENT2}$(printf '%-${LABEL_WIDTH}s' "$label") ${bar}     ${used_gb} / ${total_gb} GB"
+    echo -e "${INDENT2}$(printf "%-${LABEL_WIDTH}s" "$label") ${bar}     ${used_gb} / ${total_gb} GB"
 }
 
 # Print storage line with progress bar

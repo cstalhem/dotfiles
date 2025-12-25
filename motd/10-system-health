@@ -166,7 +166,7 @@ print_storage_line() {
 
     local label=${MOUNT_LABELS[$mount_point]:-$mount_point}
 
-    echo -e "${INDENT2}${warn_icon}$(printf '%-${LABEL_WIDTH}s' "$label") ${bar}    ${used_gb} / ${total_gb} GB"
+    echo -e "${INDENT2}${warn_icon}$(printf "%-${LABEL_WIDTH}s" "$label") ${bar}    ${used_gb} / ${total_gb} GB"
 }
 
 # Get local IP address

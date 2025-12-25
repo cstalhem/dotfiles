@@ -94,8 +94,8 @@ progress_bar() {
 
     # Build the bar
     local bar="${color}["
-    bar+=$(printf '%*s' "$filled" '' | tr ' ' '█')
-    bar+=$(printf '%*s' "$empty" '' | tr ' ' '░')
+    [ "$filled" -gt 0 ] && bar+=$(printf '█%.0s' $(seq 1 $filled))
+    [ "$empty" -gt 0 ] && bar+=$(printf '░%.0s' $(seq 1 $empty))
     bar+="]${RESET}"
 
     printf "%s %3d%%" "$bar" "$percent"

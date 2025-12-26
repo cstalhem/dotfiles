@@ -1,0 +1,51 @@
+# Nano configuration for srv1
+# Managed by chezmoi - edit source at ~/.local/share/chezmoi/dot_config/nano/nanorc
+
+# ------------------------------------------------------------------------------
+# Display
+# ------------------------------------------------------------------------------
+
+# Show line numbers in the left margin
+set linenumbers
+
+# Constantly display cursor position (line/column/character) at bottom
+set constantshow
+
+# Wrap long lines visually (doesn't insert actual line breaks)
+set softwrap
+
+# Highlight matching brackets when cursor is on one
+set matchbrackets "(<[{)>]}"
+
+# ------------------------------------------------------------------------------
+# Editing
+# ------------------------------------------------------------------------------
+
+# Maintain indentation when creating new lines
+set autoindent
+
+# Use 2-space indentation (practical default for YAML-heavy work)
+set tabsize 2
+
+# Convert tabs to spaces (prevents YAML indentation issues)
+set tabstospaces
+
+# Enable mouse support for cursor positioning
+set mouse
+
+# ------------------------------------------------------------------------------
+# Safety
+# ------------------------------------------------------------------------------
+
+# Create backup files (filename~) before overwriting
+set backup
+
+# Use more secure file saving (write to temp, then rename)
+set locking
+
+# ------------------------------------------------------------------------------
+# Syntax Highlighting
+# ------------------------------------------------------------------------------
+
+# Include all built-in syntax definitions
+include "/usr/share/nano/*.nanorc"

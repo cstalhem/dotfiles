@@ -1,0 +1,64 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.directory
+
+# Windows (in case you encounter files from others)
+Thumbs.db
+Desktop.ini
+
+# Editors / IDEs
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+*.sublime-workspace
+*.sublime-project
+
+# VS Code
+# (settings can be project-specific, so some prefer to commit .vscode/)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Tags
+tags
+TAGS
+.tags
+
+# Environment and secrets (safety net)
+.env
+.env.local
+*.pem
+*.key
+
+# Archives (rarely intentional)
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Compiled objects
+*.o
+*.so
+*.class
+
+# Logs
+*.log
+
+# SQLite databases
+*.sqlite

@@ -1,0 +1,67 @@
+{
+  "cleanupPeriodDays": 30,
+  "attribution": {
+    "commit": "🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(npm run test:*)",
+      "Read(~/.ssh/known_hosts)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(*.key)",
+      "Read(*.pem)",
+      "Read(~/.ssh/*)",
+      "Read(~/.aws/*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(npm install:*)",
+      "Bash(rm:*)",
+      "WebFetch"
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "/bin/bash /Users/cstalhem/.claude/statusline-command.sh"
+  },
+  "enabledPlugins": {
+    "code-review@claude-code-plugins": false,
+    "commit-commands@claude-code-plugins": false,
+    "explanatory-output-style@claude-code-plugins": false,
+    "frontend-design@claude-code-plugins": false,
+    "learning-output-style@claude-code-plugins": false,
+    "pr-review-toolkit@claude-code-plugins": false,
+    "typescript-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "obsidian@personal-marketplace": true,
+    "context7@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "learning-output-style@claude-plugins-official": true
+  },
+  "outputStyle": "Learning",
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "network": {
+      "allowedDomains": [
+        "api.github.com",
+        "github.com"
+      ],
+      "allowLocalBinding": true
+    }
+  },
+  "alwaysThinkingEnabled": true
+}

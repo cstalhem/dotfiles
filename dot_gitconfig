@@ -1,7 +1,14 @@
 [user]
 	name = Calle Stålhem
 	email = carl@stalhem.se
-	signingkey = /home/calle/.ssh/id_rsa.pub
+# Set signing key for Git on m1-mbp
+{{- if eq .chezmoi.hostname "m1-mbp" }}
+  signingkey = /Users/cstalhem/.ssh/id_ed25519.pub
+{{- end }}
+# Set signing key for Git on srv1
+{{- if eq .chezmoi.hostname "srv1" }}
+  signingkey = /home/calle/.ssh/id_rsa.pub
+{{- end }}
 [gpg]
 	format = ssh
 [commit]

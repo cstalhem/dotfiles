@@ -1,6 +1,13 @@
+[core]
+  # converts CRLF to LF on commit
+  autocrlf = input
+
+[init]
+  defaultBranch = main
+
 [user]
-	name = Calle Stålhem
-	email = carl@stalhem.se
+  name = Calle Stålhem
+  email = carl@stalhem.se
 
 # Set signing key for Git on m1-mbp
 {{- if eq .chezmoi.hostname "m1-mbp" }}
@@ -12,7 +19,28 @@
   signingkey = /home/calle/.ssh/id_rsa.pub
 {{- end }}
 
+[credential "https://dev.azure.com"]
+  useHttpPath = true
+  username = carl.stalhem@b3.se
+
 [gpg]
-	format = ssh
+  format = ssh
+
 [commit]
-	gpgsign = true
+  gpgsign = true
+
+[fetch]
+  # auto-removes deleted remote branches
+  prune = true
+
+[push]
+  # pushes current branch to same name on remote
+  default = current
+  # auto-tracks remote branch on first push
+  autoSetupRemote = true
+
+[filter "lfs"]
+  clean = git-lfs clean -- %f
+  smudge = git-lfs smudge -- %f
+  process = git-lfs filter-process
+  required = true

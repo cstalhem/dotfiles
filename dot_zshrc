@@ -3,6 +3,18 @@
 fastfetch
 {{- end }}
 
+# --------------------------------
+#   Language variables
+# --------------------------------
+# English for messages/errors, Swedish for regional formats
+export LANG="sv_SE.UTF-8"
+export LC_COLLATE="sv_SE.UTF-8"
+export LC_CTYPE="sv_SE.UTF-8"
+export LC_MESSAGES="en_US.UTF-8"
+export LC_MONETARY="sv_SE.UTF-8"
+export LC_NUMERIC="sv_SE.UTF-8"
+export LC_TIME="sv_SE.UTF-8"
+
 # If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
 
@@ -85,14 +97,6 @@ source $ZSH/oh-my-zsh.sh
 
 # You may need to manually set your language environment
 # export LANG=en_US.UTF-8
-
-# English for messages/errors, Swedish for regional formats
-export LANG=en_US.UTF-8
-export LC_MESSAGES=en_US.UTF-8
-export LC_TIME=sv_SE.UTF-8
-export LC_NUMERIC=sv_SE.UTF-8
-export LC_MONETARY=sv_SE.UTF-8
-export LC_COLLATE=sv_SE.UTF-8
 
 # Unsetting these to avoid conflicts
 unset LC_ALL

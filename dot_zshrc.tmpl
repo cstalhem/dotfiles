@@ -102,6 +102,12 @@ compinit
 {{- end}}
 
 # --------------------------------
+#   Executables
+
+# Enable shell completion with 1Password
+eval "$(op completion zsh)"; compdef _op op
+
+# --------------------------------
 #   Starship
 
 # Initialise Starship

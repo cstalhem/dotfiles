@@ -57,11 +57,6 @@ zstyle :omz:plugins:ssh-agent identities id_ed25519
 # Source Oh My Zsh so that it runs when a new shell starts
 source $ZSH/oh-my-zsh.sh
 
-# Source zsh-syntax-highlighting plugin
-{{- if eq .chezmoi.hostname "m1-mbp" }}
-source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-{{- end }}
-
 # --------------------------------
 #   User configuration
 # --------------------------------
@@ -111,3 +106,8 @@ compinit
 
 # Initialise Starship
 eval "$(starship init zsh)"
+
+# Source zsh-syntax-highlighting plugin
+{{- if eq .chezmoi.hostname "m1-mbp" }}
+source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+{{- end }}

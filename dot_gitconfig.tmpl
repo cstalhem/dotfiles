@@ -1,6 +1,10 @@
 [core]
   # converts CRLF to LF on commit
   autocrlf = input
+{{- if eq .chezmoi.hostname "m1-mbp" }}
+  # Use git-delta for diffs
+  paged = delta
+{{- end }}
 
 [init]
   defaultBranch = main
@@ -29,6 +33,16 @@
 [commit]
   gpgsign = true
 
+{{- if eq .chezmoi.hostname "srv1" }}
+[interactive]
+  diffFilter = delta --color-only
+
+[delta]
+  # use n and N to move between diff sections
+  navigate = true
+  # dark = true or light = true, omit for auto-detection
+{{- end }}
+
 [fetch]
   # auto-removes deleted remote branches
   prune = true
@@ -38,6 +52,9 @@
   default = current
   # auto-tracks remote branch on first push
   autoSetupRemote = true
+
+[merge]
+  conflictStyle = zdiff3
 
 [filter "lfs"]
   clean = git-lfs clean -- %f

@@ -6,6 +6,8 @@
   pager = delta
 {{- end }}
 
+# Testing delta again
+
 [init]
   defaultBranch = main
 
@@ -37,11 +39,16 @@
 [interactive]
   diffFilter = delta --color-only
 
+[include]
+  path = ~/.config/delta/themes.gitconfig
+
 [delta]
   # use n and N to move between diff sections
   navigate = true
   # dark = true or light = true, omit for auto-detection
   line-numbers = true
+  # choose a theme
+  features = collared-trogon
 {{- end }}
 
 [fetch]

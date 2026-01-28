@@ -41,11 +41,6 @@ ZSH_THEME="robbyrussell"
 # see 'man strftime' for details.
 HIST_STAMPS="yyyy-mm-dd"
 
-# Source zsh-syntax-highlighting plugin
-{{- if eq .chezmoi.hostname "m1-mbp" }}
-source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-{{- end }}
-
 # Which plugins would you like to load?
 # Standard plugins can be found in $ZSH/plugins/
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
@@ -61,6 +56,11 @@ zstyle :omz:plugins:ssh-agent identities id_ed25519
 
 # Source Oh My Zsh so that it runs when a new shell starts
 source $ZSH/oh-my-zsh.sh
+
+# Source zsh-syntax-highlighting plugin
+{{- if eq .chezmoi.hostname "m1-mbp" }}
+source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+{{- end }}
 
 # --------------------------------
 #   User configuration

@@ -106,8 +106,3 @@ compinit
 
 # Initialise Starship
 eval "$(starship init zsh)"
-
-# Source zsh-syntax-highlighting plugin
-{{- if eq .chezmoi.hostname "m1-mbp" }}
-source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-{{- end }}

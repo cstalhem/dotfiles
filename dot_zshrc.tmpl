@@ -79,11 +79,6 @@ export CONTEXT7_MCP_API_KEY="{{ onepasswordRead "op://Personal/Context7/Codex MC
 #   Path edits
 
 {{- if eq .chezmoi.hostname "m1-mbp" }}
-# Add Pyenv to Path
-export PYENV_ROOT="$HOME/.pyenv"
-[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-
 # Add Bun installed packages to Path
 export PATH="$HOME/.bun/bin:$PATH"
 

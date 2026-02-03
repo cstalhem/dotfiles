@@ -1,0 +1,6 @@
+{
+  "files.associations": {
+    "**/**.tmpl": "shellscript",
+    "**/dot_gitignore": "markdown"
+  }
+}

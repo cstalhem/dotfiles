@@ -17,6 +17,7 @@ Below are the guidelines you follow when you are asked to create code. Note that
 ## General rules
 
 - Don't create dependency files such as `pyproject.toml`, `package.json`, etc, manually. Let package managers handle them.
+- always use `bun` or `bunx`, not npm
 
 ## Behavioural rules
 

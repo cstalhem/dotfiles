@@ -1,8 +1,22 @@
 {
-  "cleanupPeriodDays": 30,
+  "alwaysThinkingEnabled": true,
   "attribution": {
     "commit": "🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
   },
+  "availableModels": ["opus", "sonnet"],
+  "cleanupPeriodDays": 30,
+  "enabledPlugins": {
+    "learning-output-style@claude-plugins-official": true,
+    "obsidian@personal-marketplace": true,
+    "playwright@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true
+  },
+  "env": {
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "sonnet"
+  },
+  "outputStyle": "Learning",
   "permissions": {
     "allow": [
       "Bash(ls:*)",
@@ -14,6 +28,7 @@
       "Bash(find:*)",
       "Bash(npm run test:*)"
     ],
+    "ask": ["Bash(git push:*)", "Bash(npm install:*)", "Bash(rm:*)"],
     "deny": [
       "Read(.env)",
       "Read(.env.*)",
@@ -21,40 +36,19 @@
       "Read(*.pem)",
       "Read(~/.ssh/*)",
       "Read(~/.aws/*)"
-    ],
-    "ask": [
-      "Bash(git push:*)",
-      "Bash(npm install:*)",
-      "Bash(rm:*)",
-      "WebFetch"
     ]
+  },
+  "sandbox": {
+    "autoAllowBashIfSandboxed": true,
+    "enabled": true,
+    "excludedCommands": ["git"],
+    "network": {
+      "allowedDomains": ["api.github.com", "github.com"],
+      "allowLocalBinding": true
+    }
   },
   "statusLine": {
-    "type": "command",
-    "command": "/bin/bash /Users/cstalhem/.claude/statusline-command.sh"
-  },
-  "enabledPlugins": {
-    "obsidian@personal-marketplace": true,
-    "typescript-lsp@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": true,
-    "learning-output-style@claude-plugins-official": true
-  },
-  "outputStyle": "Learning",
-  "sandbox": {
-    "enabled": true,
-    "autoAllowBashIfSandboxed": true,
-    "network": {
-      "allowedDomains": [
-        "api.github.com",
-        "github.com"
-      ],
-      "allowLocalBinding": true
-    },
-    "excludedCommands": [
-      "git"
-    ]
-  },
-  "alwaysThinkingEnabled": true
+    "command": "/bin/bash /Users/cstalhem/.claude/statusline-command.sh",
+    "type": "command"
+  }
 }

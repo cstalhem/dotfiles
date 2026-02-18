@@ -13,7 +13,7 @@
     "typescript-lsp@claude-plugins-official": true
   },
   "env": {
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-4-5-20250929"
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-4-6"
   },
   "outputStyle": "Learning",
   "permissions": {
@@ -47,7 +47,8 @@
     }
   },
   "statusLine": {
-    "command": "/bin/bash /Users/cstalhem/.claude/statusline-command.sh",
-    "type": "command"
+    "type": "command",
+    "command": "bunx -y ccstatusline@latest",
+    "padding": 0
   }
 }

@@ -1,18 +1,11 @@
 {
-  "alwaysThinkingEnabled": true,
-  "attribution": {
-    "commit": "🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
-  },
   "cleanupPeriodDays": 30,
-  "enabledPlugins": {
-    "learning-output-style@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
-    "plugin-dev@claude-plugins-official": true
-  },
   "env": {
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-4-6"
   },
-  "outputStyle": "Explanatory",
+  "attribution": {
+    "commit": "🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
+  },
   "permissions": {
     "allow": [
       "Bash(ls:*)",
@@ -24,7 +17,6 @@
       "Bash(find:*)",
       "Bash(npm run test:*)"
     ],
-    "ask": ["Bash(git push:*)", "Bash(npm install:*)", "Bash(rm:*)"],
     "deny": [
       "Read(.env)",
       "Read(.env.*)",
@@ -32,20 +24,39 @@
       "Read(*.pem)",
       "Read(~/.ssh/*)",
       "Read(~/.aws/*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(npm install:*)",
+      "Bash(rm:*)"
     ]
-  },
-  "sandbox": {
-    "autoAllowBashIfSandboxed": true,
-    "enabled": true,
-    "excludedCommands": ["git"],
-    "network": {
-      "allowedDomains": ["api.github.com", "github.com"],
-      "allowLocalBinding": true
-    }
   },
   "statusLine": {
     "type": "command",
     "command": "bunx -y ccstatusline@latest",
     "padding": 0
-  }
+  },
+  "enabledPlugins": {
+    "learning-output-style@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true
+  },
+  "outputStyle": "Explanatory",
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "network": {
+      "allowedDomains": [
+        "api.github.com",
+        "github.com"
+      ],
+      "allowLocalBinding": true
+    },
+    "excludedCommands": [
+      "git"
+    ]
+  },
+  "alwaysThinkingEnabled": true
 }

@@ -79,6 +79,9 @@ export CONTEXT7_MCP_API_KEY="{{ onepasswordRead "op://Personal/Context7/Codex MC
 
 # Cinode MCP Access token
 export CINODE_ACCESS_TOKEN="{{ onepasswordRead "op://B3/B3 - Main Account/Cinode/MCP Access Token" }}"
+
+# Set the Rod/Rodney exceutable to the regular Chrome install instead of the cached one
+export ROD_CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 {{- end }}
 
 # --------------------------------

@@ -1,7 +1,8 @@
 {
   "cleanupPeriodDays": 30,
   "env": {
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-4-6"
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-sonnet-4-6",
+    "ENABLE_LSP_TOOL": "1"
   },
   "attribution": {
     "commit": "🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
@@ -25,11 +26,7 @@
       "Read(~/.ssh/*)",
       "Read(~/.aws/*)"
     ],
-    "ask": [
-      "Bash(git push:*)",
-      "Bash(npm install:*)",
-      "Bash(rm:*)"
-    ]
+    "ask": ["Bash(git push:*)", "Bash(npm install:*)", "Bash(rm:*)"]
   },
   "statusLine": {
     "type": "command",
@@ -48,15 +45,10 @@
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "network": {
-      "allowedDomains": [
-        "api.github.com",
-        "github.com"
-      ],
+      "allowedDomains": ["api.github.com", "github.com"],
       "allowLocalBinding": true
     },
-    "excludedCommands": [
-      "git"
-    ]
+    "excludedCommands": ["git"]
   },
   "alwaysThinkingEnabled": true
 }

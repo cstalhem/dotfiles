@@ -38,7 +38,8 @@
     "playwright@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true
+    "pyright-lsp@claude-plugins-official": true,
+    "knowledge-system@cargus-forge": true
   },
   "outputStyle": "Explanatory",
   "sandbox": {

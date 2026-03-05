@@ -41,6 +41,7 @@
     "pyright-lsp@claude-plugins-official": true,
     "knowledge-system@cargus-forge": true
   },
+  "extraKnownMarketplaces": {},
   "outputStyle": "Explanatory",
   "sandbox": {
     "enabled": true,
@@ -49,7 +50,7 @@
       "allowedDomains": ["api.github.com", "github.com"],
       "allowLocalBinding": true
     },
-    "excludedCommands": ["git"]
+    "excludedCommands": ["git", "gh"]
   },
   "alwaysThinkingEnabled": true
 }

@@ -2,3 +2,4 @@ font-size = 14
 
 theme = Gruvbox Dark Hard
 keybind = shift+enter=text:\x1b\r
+keybind = option+backspace=text:\x1b\x7f

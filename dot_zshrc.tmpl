@@ -47,7 +47,7 @@ HIST_STAMPS="yyyy-mm-dd"
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 # Conditionally load macos aliases based on hostname
-plugins=(1password aliases brew docker docker-compose git sudo tailscale zsh-syntax-highlighting {{ if eq .chezmoi.hostname "m1-mbp" }}macos ssh-agent{{ end }})
+plugins=(1password aliases docker docker-compose git sudo tailscale uv zsh-syntax-highlighting {{ if eq .chezmoi.hostname "m1-mbp" }}macos ssh-agent brew{{ end }} {{ if eq .chezmoi.hostname "srv1" }}ubuntu{{ end }})
 
 {{- if eq .chezmoi.hostname "m1-mbp" }}
 # SSH-Agent plugin settings
@@ -93,6 +93,11 @@ export PATH="$HOME/.bun/bin:$PATH"
 
 # Antigravity editor
 export PATH="/Users/cstalhem/.antigravity/antigravity/bin:$PATH"
+{{- end }}
+
+{{- if eq .chezmoi.hostname "srv1"}}
+# Add .local/bin to support install of Claude Code CLI
+export PATH="$HOME/.local/bin:$PATH"
 {{- end }}
 
 # --------------------------------

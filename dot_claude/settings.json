@@ -26,7 +26,11 @@
       "Read(~/.ssh/*)",
       "Read(~/.aws/*)"
     ],
-    "ask": ["Bash(git push:*)", "Bash(npm install:*)", "Bash(rm:*)"]
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(npm install:*)",
+      "Bash(rm:*)"
+    ]
   },
   "statusLine": {
     "type": "command",
@@ -35,22 +39,35 @@
   },
   "enabledPlugins": {
     "learning-output-style@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
     "plugin-dev@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "knowledge-system@cargus-forge": true
+    "codex@openai-codex": true
   },
-  "extraKnownMarketplaces": {},
+  "extraKnownMarketplaces": {
+    "openai-codex": {
+      "source": {
+        "source": "github",
+        "repo": "openai/codex-plugin-cc"
+      }
+    }
+  },
   "outputStyle": "Explanatory",
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "network": {
-      "allowedDomains": ["api.github.com", "github.com"],
+      "allowedDomains": [
+        "api.github.com",
+        "github.com"
+      ],
       "allowLocalBinding": true
     },
-    "excludedCommands": ["git", "gh"]
+    "excludedCommands": [
+      "git",
+      "gh"
+    ]
   },
-  "alwaysThinkingEnabled": true
+  "alwaysThinkingEnabled": true,
+  "voiceEnabled": true
 }

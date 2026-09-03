@@ -50,10 +50,8 @@ if [[ ! -t 1 ]]; then
 fi
 
 {{- if eq .chezmoi.hostname "m1-mbp" }}
-if [[ ! -t 1 ]]; then
-  # Only run fastfetch on m1-mbp in an actual terminal
-  fastfetch
-fi
+# Only run fastfetch on m1-mbp in an actual terminal
+fastfetch
 {{- end }}
 
 # --------------------------------
@@ -109,10 +107,8 @@ source $ZSH/oh-my-zsh.sh
 #   SSH key loading
 
 {{- if eq .chezmoi.hostname "m1-mbp" }}
-if [[ ! -t 1 ]]; then
-  # Load SSH key into macOS keychain agent on shell startup
-  ssh-add --apple-use-keychain ~/.ssh/id_ed25519 2>/dev/null
-fi
+# Load SSH key into macOS keychain agent on shell startup
+ssh-add --apple-use-keychain ~/.ssh/id_ed25519 2>/dev/null
 {{- end }}
 
 # --------------------------------

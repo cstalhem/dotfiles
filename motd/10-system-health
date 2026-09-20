@@ -29,7 +29,9 @@ declare -A MOUNT_LABELS=(
 )
 
 # Public IP cache settings
-PUBLIC_IP_CACHE_FILE="/tmp/.motd_public_ip_cache"
+# /run is tmpfs and root-owned (unlike /tmp, which is world-writable), so the
+# cache resets on reboot -- acceptable, and preferable to a world-writable path.
+PUBLIC_IP_CACHE_FILE="/run/motd-public-ip"
 PUBLIC_IP_CACHE_TTL=900  # 15 minutes in seconds
 
 # ==============================================================================
@@ -141,13 +143,17 @@ print_storage_line() {
     local df_output
     df_output=$(df -B1 "$mount_point" 2>/dev/null | tail -1)
 
-    local total used
+    local total used avail
     total=$(echo "$df_output" | awk '{print $2}')
     used=$(echo "$df_output" | awk '{print $3}')
+    avail=$(echo "$df_output" | awk '{print $4}')
 
+    # Match df's Use%: used / (used + avail), excluding reserved blocks,
+    # rounded up (ceiling) rather than truncated.
     local percent=0
-    if [ "$total" -gt 0 ]; then
-        percent=$((used * 100 / total))
+    local nonreserved=$((used + avail))
+    if [ "$nonreserved" -gt 0 ]; then
+        percent=$(( (used * 100 + nonreserved - 1) / nonreserved ))
     fi
 
     local used_gb total_gb

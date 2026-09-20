@@ -11,8 +11,13 @@
 # Locale (ensure UTF-8 for Unicode characters)
 # ==============================================================================
 
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
+# Bash substring expansion and ${#var} are character-based only in a UTF-8
+# locale; otherwise they're byte-based, which splits the 3-byte box-drawing
+# characters mid-character. C.UTF-8 is built into glibc on Ubuntu 22.04+, so
+# it needs no locale-gen, unlike en_US.UTF-8 which is frequently not
+# generated on a headless server.
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
 
 # ==============================================================================
 # Colors
@@ -37,6 +42,20 @@ readonly INDENT="   "
 readonly INDENT2="      "
 readonly INDENT3="         "
 readonly LABEL_WIDTH=20
+
+# Progress bar width and precomputed fill/empty character runs (avoids
+# spawning subprocesses in progress_bar; built once at source time)
+readonly PROGRESS_BAR_WIDTH=15
+printf -v _pb_fill '%*s' "$PROGRESS_BAR_WIDTH" ''
+readonly PROGRESS_BAR_FILLED_CHARS="${_pb_fill// /█}"
+printf -v _pb_empty '%*s' "$PROGRESS_BAR_WIDTH" ''
+readonly PROGRESS_BAR_EMPTY_CHARS="${_pb_empty// /░}"
+unset _pb_fill _pb_empty
+
+# Precomputed horizontal separator line (WIDTH '─' characters)
+printf -v _sep '%*s' "$WIDTH" ''
+readonly SEPARATOR_LINE="${_sep// /─}"
+unset _sep
 
 # ==============================================================================
 # Status Icons (Nerd Font)
@@ -85,9 +104,14 @@ progress_bar() {
     local percent=$1
     local warn_threshold=${2:-70}
     local crit_threshold=${3:-85}
-    local width=15
-    local filled=$((percent * width / 100))
-    local empty=$((width - filled))
+
+    # Clamp percent into 0..100 so out-of-range input can't produce a
+    # malformed slice or a negative empty count
+    [ "$percent" -lt 0 ] && percent=0
+    [ "$percent" -gt 100 ] && percent=100
+
+    local filled=$((percent * PROGRESS_BAR_WIDTH / 100))
+    local empty=$((PROGRESS_BAR_WIDTH - filled))
 
     # Determine color based on percentage
     local color
@@ -101,8 +125,8 @@ progress_bar() {
 
     # Build the bar
     local bar="${color}["
-    [ "$filled" -gt 0 ] && bar+=$(printf '█%.0s' $(seq 1 $filled))
-    [ "$empty" -gt 0 ] && bar+=$(printf '░%.0s' $(seq 1 $empty))
+    bar+="${PROGRESS_BAR_FILLED_CHARS:0:filled}"
+    bar+="${PROGRESS_BAR_EMPTY_CHARS:0:empty}"
     bar+="]${RESET}"
 
     printf "%s %3d%%" "$bar" "$percent"
@@ -114,7 +138,7 @@ print_section_header() {
     local icon="$1"
     local title="$2"
     echo ""
-    printf '%s\n' "$(printf '─%.0s' $(seq 1 $WIDTH))"
+    printf '%s\n' "$SEPARATOR_LINE"
     echo -e "${WHITE}${icon}  ${title}${RESET}"
     echo ""
 }
@@ -135,38 +159,50 @@ print_separator() {
     printf '%s\n' "$(printf '─%.0s' $(seq 1 $WIDTH))"
 }
 
-# Get status color based on percentage thresholds
-# Usage: get_status_color <percentage> [warn_threshold] [crit_threshold]
-# Default thresholds: warn=70, crit=85
-get_status_color() {
-    local percent=$1
-    local warn_threshold=${2:-70}
-    local crit_threshold=${3:-85}
+# Print a box's top border with a bracketed, optionally colored label
+# Usage: box_top_border "<label>" [color]
+# Renders "┌─[ <label> ]───...───┐" at exactly WIDTH columns. <label> is
+# measured as plain text and truncated if it would overflow the border;
+# color is applied only when writing the label, never counted toward width.
+box_top_border() {
+    local label="$1"
+    local color="$2"
+    local max_label=$((WIDTH - 7)) # "┌─[ " + " ]" + "┐" = 7 non-label chars
 
-    if [ "$percent" -ge "$crit_threshold" ]; then
-        echo "$RED"
-    elif [ "$percent" -ge "$warn_threshold" ]; then
-        echo "$YELLOW"
-    else
-        echo "$GREEN"
-    fi
+    [ "${#label}" -gt "$max_label" ] && label="${label:0:max_label}"
+
+    local colored_label="$label"
+    [ -n "$color" ] && colored_label="${color}${label}${RESET}"
+
+    local dashes="${SEPARATOR_LINE:0:$((max_label - ${#label}))}"
+
+    printf '┌─[ %b ]%s┐\n' "$colored_label" "$dashes"
 }
 
-# Get status icon based on percentage thresholds
-# Usage: get_status_icon <percentage> [warn_threshold] [crit_threshold]
-# Default thresholds: warn=70, crit=85
-get_status_icon() {
-    local percent=$1
-    local warn_threshold=${2:-70}
-    local crit_threshold=${3:-85}
+# Print a box's bottom border
+# Usage: box_bottom_border
+box_bottom_border() {
+    printf '└%s┘\n' "${SEPARATOR_LINE:0:$((WIDTH - 2))}"
+}
 
-    if [ "$percent" -ge "$crit_threshold" ]; then
-        echo "$ICON_ERROR"
-    elif [ "$percent" -ge "$warn_threshold" ]; then
-        echo "$ICON_WARN"
-    else
-        echo "$ICON_OK"
-    fi
+# Print a box content line, padded to exactly WIDTH columns
+# Usage: box_line "<text>" [color]
+# <text> is measured as plain text (no ANSI) and truncated if it would
+# overflow the box; color is applied only on output, never counted toward
+# width. Call with no text for a blank line.
+box_line() {
+    local text="$1"
+    local color="$2"
+    local box_pad=5
+    local max_text=$((WIDTH - 2 - box_pad)) # both borders + left inner padding
+
+    [ "${#text}" -gt "$max_text" ] && text="${text:0:max_text}"
+
+    local colored_text="$text"
+    [ -n "$color" ] && colored_text="${color}${text}${RESET}"
+
+    local right_pad=$((WIDTH - 2 - box_pad - ${#text}))
+    printf '│%*s%b%*s│\n' "$box_pad" '' "$colored_text" "$right_pad" ''
 }
 
 # Format bytes to human readable format (GB)

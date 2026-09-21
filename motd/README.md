@@ -79,17 +79,23 @@ All scripts should use these standardized ANSI color codes for consistency.
 
 #### Bash Color Variables
 
+Colors are defined with `$'...'` so each holds a real ESC byte rather than a
+literal `\e` sequence. This lets them render through plain `echo` and
+`printf '%s'`, so no output path needs `echo -e` or `printf '%b'` — which
+would also interpret backslashes appearing in *data* (hostnames, package
+names, `PRETTY_NAME`).
+
 ```bash
 # Colors
-readonly RED='\e[31m'
-readonly GREEN='\e[32m'
-readonly YELLOW='\e[33m'
-readonly BLUE='\e[34m'
-readonly CYAN='\e[36m'
-readonly WHITE='\e[1;37m'
-readonly BOLD='\e[1m'
-readonly DIM='\e[2m'
-readonly RESET='\e[0m'
+readonly RED=$'\e[31m'
+readonly GREEN=$'\e[32m'
+readonly YELLOW=$'\e[33m'
+readonly BLUE=$'\e[34m'
+readonly CYAN=$'\e[36m'
+readonly WHITE=$'\e[1;37m'
+readonly BOLD=$'\e[1m'
+readonly DIM=$'\e[2m'
+readonly RESET=$'\e[0m'
 ```
 
 ### Nerd Font Icons
@@ -252,7 +258,7 @@ print_section_header() {
     local title="$2"
     echo ""
     printf '%s\n' "$SEPARATOR_LINE"
-    echo -e "${WHITE}${icon}  ${title}${RESET}"
+    echo "${WHITE}${icon}  ${title}${RESET}"
     echo ""
 }
 ```
@@ -267,15 +273,15 @@ A common functions file (`lib/common.sh`, deployed to `/etc/update-motd.d/lib/co
 # /etc/update-motd.d/lib/common.sh (sourced, not executed)
 
 # Colors
-readonly RED='\e[31m'
-readonly GREEN='\e[32m'
-readonly YELLOW='\e[33m'
-readonly BLUE='\e[34m'
-readonly CYAN='\e[36m'
-readonly WHITE='\e[1;37m'
-readonly BOLD='\e[1m'
-readonly DIM='\e[2m'
-readonly RESET='\e[0m'
+readonly RED=$'\e[31m'
+readonly GREEN=$'\e[32m'
+readonly YELLOW=$'\e[33m'
+readonly BLUE=$'\e[34m'
+readonly CYAN=$'\e[36m'
+readonly WHITE=$'\e[1;37m'
+readonly BOLD=$'\e[1m'
+readonly DIM=$'\e[2m'
+readonly RESET=$'\e[0m'
 
 # Layout
 readonly WIDTH=60
@@ -341,7 +347,7 @@ print_section_header() {
     local title="$2"
     echo ""
     printf '%s\n' "$SEPARATOR_LINE"
-    echo -e "${WHITE}${icon}  ${title}${RESET}"
+    echo "${WHITE}${icon}  ${title}${RESET}"
     echo ""
 }
 
@@ -372,7 +378,7 @@ box_top_border() {
 
     local dashes="${SEPARATOR_LINE:0:$((max_label - ${#label}))}"
 
-    printf '┌─[ %b ]%s┐\n' "$colored_label" "$dashes"
+    printf '┌─[ %s ]%s┐\n' "$colored_label" "$dashes"
 }
 
 # Print a box's bottom border
@@ -398,7 +404,7 @@ box_line() {
     [ -n "$color" ] && colored_text="${color}${text}${RESET}"
 
     local right_pad=$((WIDTH - 2 - box_pad - ${#text}))
-    printf '│%*s%b%*s│\n' "$box_pad" '' "$colored_text" "$right_pad" ''
+    printf '│%*s%s%*s│\n' "$box_pad" '' "$colored_text" "$right_pad" ''
 }
 ```
 
@@ -583,6 +589,11 @@ Display rules:
 - Show all configured mount points
 - Skip mount points that don't exist
 - Warning icon (nf-fa-warning) prepended to label if ≥ 70%
+- The icon occupies a fixed 2-column slot that is blank when healthy, and the
+  label field is narrowed by the same 2 columns, so warning rows stay aligned
+  with healthy rows and with the Memory rows (bar always starts at column 27).
+  This assumes the Nerd Font glyph renders at single width; some builds draw
+  Private Use Area icons double-width, which would leave a 1-column drift
 - Values right-aligned
 
 Percentage definition: matches GNU `df`'s `Use%` exactly — `used / (used + available)`, i.e. it **excludes** the blocks `df` reserves for root, rounded **up** (ceiling), not truncated. The displayed `USED / TOTAL GB` figures still use `Size` (the filesystem's full block count, including the root-reserved blocks) as the total — exactly what `df -h` itself displays. The two denominators differ by the ~5% ext4 root reservation, so the displayed percentage and the displayed `USED / TOTAL` ratio will not exactly agree by naive division; this is intentional and matches `df`'s own behavior.

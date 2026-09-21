@@ -23,15 +23,15 @@ export LC_ALL=C.UTF-8
 # Colors
 # ==============================================================================
 
-readonly RED='\e[31m'
-readonly GREEN='\e[32m'
-readonly YELLOW='\e[33m'
-readonly BLUE='\e[34m'
-readonly CYAN='\e[36m'
-readonly WHITE='\e[1;37m'
-readonly BOLD='\e[1m'
-readonly DIM='\e[2m'
-readonly RESET='\e[0m'
+readonly RED=$'\e[31m'
+readonly GREEN=$'\e[32m'
+readonly YELLOW=$'\e[33m'
+readonly BLUE=$'\e[34m'
+readonly CYAN=$'\e[36m'
+readonly WHITE=$'\e[1;37m'
+readonly BOLD=$'\e[1m'
+readonly DIM=$'\e[2m'
+readonly RESET=$'\e[0m'
 
 # ==============================================================================
 # Layout Constants
@@ -139,7 +139,7 @@ print_section_header() {
     local title="$2"
     echo ""
     printf '%s\n' "$SEPARATOR_LINE"
-    echo -e "${WHITE}${icon}  ${title}${RESET}"
+    echo "${WHITE}${icon}  ${title}${RESET}"
     echo ""
 }
 
@@ -156,7 +156,7 @@ print_line() {
 # Print horizontal separator line
 # Usage: print_separator
 print_separator() {
-    printf '%s\n' "$(printf '─%.0s' $(seq 1 $WIDTH))"
+    printf '%s\n' "$SEPARATOR_LINE"
 }
 
 # Print a box's top border with a bracketed, optionally colored label
@@ -176,7 +176,7 @@ box_top_border() {
 
     local dashes="${SEPARATOR_LINE:0:$((max_label - ${#label}))}"
 
-    printf '┌─[ %b ]%s┐\n' "$colored_label" "$dashes"
+    printf '┌─[ %s ]%s┐\n' "$colored_label" "$dashes"
 }
 
 # Print a box's bottom border
@@ -202,7 +202,7 @@ box_line() {
     [ -n "$color" ] && colored_text="${color}${text}${RESET}"
 
     local right_pad=$((WIDTH - 2 - box_pad - ${#text}))
-    printf '│%*s%b%*s│\n' "$box_pad" '' "$colored_text" "$right_pad" ''
+    printf '│%*s%s%*s│\n' "$box_pad" '' "$colored_text" "$right_pad" ''
 }
 
 # Format bytes to human readable format (GB)

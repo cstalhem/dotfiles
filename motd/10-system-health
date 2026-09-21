@@ -74,13 +74,13 @@ get_load_badge() {
 
     case "$status" in
         "high")
-            echo -e "${RED}[ ${ICON_ERROR} High ]${RESET}"
+            echo "${RED}[ ${ICON_ERROR} High ]${RESET}"
             ;;
         "elevated")
-            echo -e "${YELLOW}[ ${ICON_WARN} Elevated ]${RESET}"
+            echo "${YELLOW}[ ${ICON_WARN} Elevated ]${RESET}"
             ;;
         *)
-            echo -e "${GREEN}[ ${ICON_OK} Healthy ]${RESET}"
+            echo "${GREEN}[ ${ICON_OK} Healthy ]${RESET}"
             ;;
     esac
 }
@@ -127,7 +127,7 @@ print_memory_line() {
     local bar
     bar=$(progress_bar "$percent" "$warn_threshold" "$crit_threshold")
 
-    echo -e "${INDENT2}$(printf "%-${LABEL_WIDTH}s" "$label") ${bar}     ${used_gb} / ${total_gb} GB"
+    echo "${INDENT2}$(printf "%-${LABEL_WIDTH}s" "$label") ${bar}     ${used_gb} / ${total_gb} GB"
 }
 
 # Print storage line with progress bar
@@ -160,8 +160,12 @@ print_storage_line() {
     used_gb=$(bytes_to_gb "$used")
     total_gb=$(bytes_to_gb "$total")
 
-    # Determine warning icon
-    local warn_icon=""
+    # Reserve a fixed 2-column slot for the warning icon so that warning rows
+    # stay column-aligned with healthy ones instead of shifting right.
+    # Assumes the Nerd Font glyph renders at single width; some Nerd Font
+    # builds draw Private Use Area icons double-width, which would leave a
+    # 1-column drift.
+    local warn_icon="  "
     if [ "$percent" -ge 70 ]; then
         warn_icon="${ICON_WARN} "
     fi
@@ -172,7 +176,7 @@ print_storage_line() {
 
     local label=${MOUNT_LABELS[$mount_point]:-$mount_point}
 
-    echo -e "${INDENT2}${warn_icon}$(printf "%-${LABEL_WIDTH}s" "$label") ${bar}    ${used_gb} / ${total_gb} GB"
+    echo "${INDENT2}${warn_icon}$(printf "%-$((LABEL_WIDTH - 2))s" "$label") ${bar}    ${used_gb} / ${total_gb} GB"
 }
 
 # Get local IP address
@@ -235,7 +239,7 @@ if [ -f /var/run/reboot-required ]; then
             reboot_reason=" (${reboot_reason})"
         fi
     fi
-    echo -e "${INDENT}${YELLOW}${ICON_REBOOT} Reboot required${reboot_reason}${RESET}"
+    echo "${INDENT}${YELLOW}${ICON_REBOOT} Reboot required${reboot_reason}${RESET}"
     echo ""
 fi
 
@@ -270,7 +274,7 @@ echo ""
 # Memory
 # ------------------------------------------------------------------------------
 
-echo -e "${INDENT}${ICON_MEMORY} ${WHITE}MEMORY${RESET}"
+echo "${INDENT}${ICON_MEMORY} ${WHITE}MEMORY${RESET}"
 
 # RAM usage
 read -r ram_used ram_total <<< "$(get_memory_info ram)"
@@ -288,7 +292,7 @@ echo ""
 # Storage
 # ------------------------------------------------------------------------------
 
-echo -e "${INDENT}${ICON_DISK} ${WHITE}STORAGE${RESET}"
+echo "${INDENT}${ICON_DISK} ${WHITE}STORAGE${RESET}"
 
 for mount_point in "${MOUNT_POINTS[@]}"; do
     print_storage_line "$mount_point"
@@ -300,28 +304,28 @@ echo ""
 # Network
 # ------------------------------------------------------------------------------
 
-echo -e "${INDENT}${ICON_NETWORK} ${WHITE}NETWORK${RESET}"
+echo "${INDENT}${ICON_NETWORK} ${WHITE}NETWORK${RESET}"
 
 # Local IP
 local_ip=$(get_local_ip)
 if [ -n "$local_ip" ]; then
-    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Local IP:")${RESET} ${CYAN}${local_ip}${RESET}"
+    echo "${INDENT2}${DIM}$(printf '%-20s' "Local IP:")${RESET} ${CYAN}${local_ip}${RESET}"
 else
-    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Local IP:")${RESET} ${YELLOW}Unable to detect${RESET}"
+    echo "${INDENT2}${DIM}$(printf '%-20s' "Local IP:")${RESET} ${YELLOW}Unable to detect${RESET}"
 fi
 
 # Tailscale IP
 tailscale_ip=$(get_tailscale_ip)
 if [ -n "$tailscale_ip" ]; then
-    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Tailnet IP:")${RESET} ${CYAN}${tailscale_ip}${RESET}  ${GREEN}${ICON_OK} Connected${RESET}"
+    echo "${INDENT2}${DIM}$(printf '%-20s' "Tailnet IP:")${RESET} ${CYAN}${tailscale_ip}${RESET}  ${GREEN}${ICON_OK} Connected${RESET}"
 else
-    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Tailnet IP:")${RESET} ${YELLOW}Not connected${RESET}"
+    echo "${INDENT2}${DIM}$(printf '%-20s' "Tailnet IP:")${RESET} ${YELLOW}Not connected${RESET}"
 fi
 
 # Public IP
 public_ip=$(get_public_ip)
 if [ -n "$public_ip" ]; then
-    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Public IP:")${RESET} ${CYAN}${public_ip}${RESET}"
+    echo "${INDENT2}${DIM}$(printf '%-20s' "Public IP:")${RESET} ${CYAN}${public_ip}${RESET}"
 else
-    echo -e "${INDENT2}${DIM}$(printf '%-20s' "Public IP:")${RESET} ${YELLOW}Unable to detect${RESET}"
+    echo "${INDENT2}${DIM}$(printf '%-20s' "Public IP:")${RESET} ${YELLOW}Unable to detect${RESET}"
 fi

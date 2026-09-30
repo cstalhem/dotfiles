@@ -12,6 +12,7 @@ This document defines the requirements for a custom SSH login MOTD (Message of t
   - [Progress Bar Standard](#progress-bar-standard)
   - [Box Drawing Characters](#box-drawing-characters)
   - [Shared Functions](#shared-functions)
+  - [Locale](#locale)
 - [Section Specifications](#section-specifications)
   - [00-header](#00-header)
   - [10-system-health](#10-system-health)
@@ -78,17 +79,23 @@ All scripts should use these standardized ANSI color codes for consistency.
 
 #### Bash Color Variables
 
+Colors are defined with `$'...'` so each holds a real ESC byte rather than a
+literal `\e` sequence. This lets them render through plain `echo` and
+`printf '%s'`, so no output path needs `echo -e` or `printf '%b'` — which
+would also interpret backslashes appearing in *data* (hostnames, package
+names, `PRETTY_NAME`).
+
 ```bash
 # Colors
-readonly RED='\e[31m'
-readonly GREEN='\e[32m'
-readonly YELLOW='\e[33m'
-readonly BLUE='\e[34m'
-readonly CYAN='\e[36m'
-readonly WHITE='\e[1;37m'
-readonly BOLD='\e[1m'
-readonly DIM='\e[2m'
-readonly RESET='\e[0m'
+readonly RED=$'\e[31m'
+readonly GREEN=$'\e[32m'
+readonly YELLOW=$'\e[33m'
+readonly BLUE=$'\e[34m'
+readonly CYAN=$'\e[36m'
+readonly WHITE=$'\e[1;37m'
+readonly BOLD=$'\e[1m'
+readonly DIM=$'\e[2m'
+readonly RESET=$'\e[0m'
 ```
 
 ### Nerd Font Icons
@@ -102,7 +109,7 @@ Scripts use Nerd Font icons for visual indicators. Icons are defined by their Ne
 | nf-fa-check | `\uf00c` | OK/Healthy status |
 | nf-fa-warning | `\uf071` | Warning state |
 | nf-fa-times_circle | `\uf05c` | Error/Critical state |
-| nf-oct-circle_slash | `\uf81e` | Stopped/Inactive |
+| nf-oct-circle_slash | `\uf468` | Stopped/Inactive |
 | nf-fa-refresh | `\uf021` | Updates/Refresh |
 | nf-fa-shield | `\uf132` | Security |
 
@@ -110,9 +117,9 @@ Scripts use Nerd Font icons for visual indicators. Icons are defined by their Ne
 
 | Icon Name | Codepoint | Section |
 |-----------|-----------|---------|
-| nf-md-heart_pulse | `\udb81\udc8d` | System Health section header |
-| nf-md-package_variant | `\udb81\udcbe` | Updates section header |
-| nf-md-docker | `\udb81\ude4b` | Docker section header |
+| nf-md-heart_pulse | `\udb81\uddf6` | System Health section header |
+| nf-md-package_variant | `\udb80\udfd6` | Updates section header |
+| nf-md-docker | `\udb82\udc68` | Docker section header |
 | nf-fa-users | `\uf0c0` | Users section header |
 
 #### Subsection/Detail Icons
@@ -120,11 +127,11 @@ Scripts use Nerd Font icons for visual indicators. Icons are defined by their Ne
 | Icon Name | Codepoint | Usage |
 |-----------|-----------|-------|
 | nf-fa-clock_o | `\uf017` | Uptime & Load subsection |
-| nf-md-memory | `\udb81\udc98` | Memory subsection |
+| nf-md-memory | `\udb80\udf5b` | Memory subsection |
 | nf-md-harddisk | `\udb80\udeca` | Storage subsection |
-| nf-md-network | `\udb81\udc8d` | Network subsection |
-| nf-fa-reboot / nf-md-restart | `\udb81\udcb5` | Reboot required |
-| nf-fa-arrow_circle_o_up | `\uf062` | Upgrade available |
+| nf-md-network | `\udb83\udc9d` | Network subsection |
+| nf-fa-reboot / nf-md-restart | `\udb81\udf09` | Reboot required |
+| nf-fa-arrow_circle_o_up | `\uf01b` | Upgrade available |
 | nf-oct-container | `\uf4b7` | Container |
 | nf-fa-user | `\uf007` | User/Session |
 | nf-fa-ban | `\uf05e` | Failed login |
@@ -138,6 +145,7 @@ readonly ICON_OK=$''                 # nf-fa-check
 readonly ICON_WARN=$''               # nf-fa-warning
 readonly ICON_ERROR=$''              # nf-fa-times_circle
 readonly ICON_STOPPED=$''            # nf-oct-circle_slash
+readonly ICON_REFRESH=$''            # nf-fa-refresh
 
 # Section Icons
 readonly ICON_HEALTH=$'󰗶'             # nf-md-heart_pulse
@@ -186,33 +194,44 @@ Progress bars provide a visual representation of resource usage.
 #### Bash Function
 
 ```bash
-# Generate a progress bar
-# Usage: progress_bar <percentage>
+# Generate a progress bar with color based on percentage
+# Usage: progress_bar <percentage> [warn_threshold] [crit_threshold]
+# Default thresholds: warn=70, crit=85
+# Output: [██████████░░░░░]  62%
 progress_bar() {
     local percent=$1
-    local width=15
-    local filled=$((percent * width / 100))
-    local empty=$((width - filled))
-    
+    local warn_threshold=${2:-70}
+    local crit_threshold=${3:-85}
+
+    # Clamp percent into 0..100 so out-of-range input can't produce a
+    # malformed slice or a negative empty count
+    [ "$percent" -lt 0 ] && percent=0
+    [ "$percent" -gt 100 ] && percent=100
+
+    local filled=$((percent * PROGRESS_BAR_WIDTH / 100))
+    local empty=$((PROGRESS_BAR_WIDTH - filled))
+
     # Determine color based on percentage
     local color
-    if [ "$percent" -ge 85 ]; then
+    if [ "$percent" -ge "$crit_threshold" ]; then
         color="$RED"
-    elif [ "$percent" -ge 70 ]; then
+    elif [ "$percent" -ge "$warn_threshold" ]; then
         color="$YELLOW"
     else
         color="$GREEN"
     fi
-    
+
     # Build the bar
     local bar="${color}["
-    bar+=$(printf '%*s' "$filled" '' | tr ' ' '█')
-    bar+=$(printf '%*s' "$empty" '' | tr ' ' '░')
+    bar+="${PROGRESS_BAR_FILLED_CHARS:0:filled}"
+    bar+="${PROGRESS_BAR_EMPTY_CHARS:0:empty}"
     bar+="]${RESET}"
-    
+
     printf "%s %3d%%" "$bar" "$percent"
 }
 ```
+
+`PROGRESS_BAR_WIDTH`, `PROGRESS_BAR_FILLED_CHARS`, and `PROGRESS_BAR_EMPTY_CHARS` are precomputed constants (see [Shared Functions](#shared-functions)) so the function slices pre-built strings instead of spawning `printf`/`tr` subshells on every call.
 
 ### Box Drawing Characters
 
@@ -237,81 +256,170 @@ Consistent box drawing characters used throughout.
 print_section_header() {
     local icon="$1"
     local title="$2"
-    local width=60
     echo ""
-    printf '%s\n' "$(printf '─%.0s' $(seq 1 $width))"
-    echo -e "${WHITE}${icon}  ${title}${RESET}"
+    printf '%s\n' "$SEPARATOR_LINE"
+    echo "${WHITE}${icon}  ${title}${RESET}"
     echo ""
 }
 ```
 
+`SEPARATOR_LINE` is a precomputed constant (`WIDTH` `─` characters, see [Shared Functions](#shared-functions)) rather than a `seq`/`printf` subshell built on every call.
+
 ### Shared Functions
 
-A common functions file can be sourced by all scripts.
+A common functions file (`lib/common.sh`, deployed to `/etc/update-motd.d/lib/common.sh`) is sourced by all scripts.
 
 ```bash
-# /etc/update-motd.d/00-common (sourced, not executed)
+# /etc/update-motd.d/lib/common.sh (sourced, not executed)
 
 # Colors
-readonly RED='\e[31m'
-readonly GREEN='\e[32m'
-readonly YELLOW='\e[33m'
-readonly BLUE='\e[34m'
-readonly CYAN='\e[36m'
-readonly WHITE='\e[1;37m'
-readonly BOLD='\e[1m'
-readonly DIM='\e[2m'
-readonly RESET='\e[0m'
+readonly RED=$'\e[31m'
+readonly GREEN=$'\e[32m'
+readonly YELLOW=$'\e[33m'
+readonly BLUE=$'\e[34m'
+readonly CYAN=$'\e[36m'
+readonly WHITE=$'\e[1;37m'
+readonly BOLD=$'\e[1m'
+readonly DIM=$'\e[2m'
+readonly RESET=$'\e[0m'
 
 # Layout
 readonly WIDTH=60
 readonly INDENT="   "
 readonly INDENT2="      "
 readonly INDENT3="         "
+readonly LABEL_WIDTH=20
 
-# Progress bar function
+# Progress bar width and precomputed fill/empty character runs (avoids
+# spawning subprocesses in progress_bar; built once at source time)
+readonly PROGRESS_BAR_WIDTH=15
+printf -v _pb_fill '%*s' "$PROGRESS_BAR_WIDTH" ''
+readonly PROGRESS_BAR_FILLED_CHARS="${_pb_fill// /█}"
+printf -v _pb_empty '%*s' "$PROGRESS_BAR_WIDTH" ''
+readonly PROGRESS_BAR_EMPTY_CHARS="${_pb_empty// /░}"
+unset _pb_fill _pb_empty
+
+# Precomputed horizontal separator line (WIDTH '─' characters)
+printf -v _sep '%*s' "$WIDTH" ''
+readonly SEPARATOR_LINE="${_sep// /─}"
+unset _sep
+
+# Generate a progress bar with color based on percentage
+# Usage: progress_bar <percentage> [warn_threshold] [crit_threshold]
+# Default thresholds: warn=70, crit=85
+# Output: [██████████░░░░░]  62%
 progress_bar() {
     local percent=$1
-    local width=15
-    local filled=$((percent * width / 100))
-    local empty=$((width - filled))
-    
+    local warn_threshold=${2:-70}
+    local crit_threshold=${3:-85}
+
+    # Clamp percent into 0..100 so out-of-range input can't produce a
+    # malformed slice or a negative empty count
+    [ "$percent" -lt 0 ] && percent=0
+    [ "$percent" -gt 100 ] && percent=100
+
+    local filled=$((percent * PROGRESS_BAR_WIDTH / 100))
+    local empty=$((PROGRESS_BAR_WIDTH - filled))
+
+    # Determine color based on percentage
     local color
-    if [ "$percent" -ge 85 ]; then
+    if [ "$percent" -ge "$crit_threshold" ]; then
         color="$RED"
-    elif [ "$percent" -ge 70 ]; then
+    elif [ "$percent" -ge "$warn_threshold" ]; then
         color="$YELLOW"
     else
         color="$GREEN"
     fi
-    
+
+    # Build the bar
     local bar="${color}["
-    bar+=$(printf '%*s' "$filled" '' | tr ' ' '█')
-    bar+=$(printf '%*s' "$empty" '' | tr ' ' '░')
+    bar+="${PROGRESS_BAR_FILLED_CHARS:0:filled}"
+    bar+="${PROGRESS_BAR_EMPTY_CHARS:0:empty}"
     bar+="]${RESET}"
-    
+
     printf "%s %3d%%" "$bar" "$percent"
 }
 
-# Section header function
+# Print section separator with icon and title
+# Usage: print_section_header "ICON" "TITLE"
 print_section_header() {
     local icon="$1"
     local title="$2"
     echo ""
-    printf '%s\n' "$(printf '─%.0s' $(seq 1 $WIDTH))"
-    echo -e "${WHITE}${icon}  ${title}${RESET}"
+    printf '%s\n' "$SEPARATOR_LINE"
+    echo "${WHITE}${icon}  ${title}${RESET}"
     echo ""
 }
 
 # Print a label: value line with consistent alignment
-# Usage: print_line "Label:" "value" [indent_level]
+# Usage: print_line "Label:" "value" [indent]
+# Default indent is INDENT (3 spaces)
 print_line() {
     local label="$1"
     local value="$2"
     local indent="${3:-$INDENT}"
-    printf "%s${DIM}%-18s${RESET} %s\n" "$indent" "$label" "$value"
+    printf "%s${DIM}%-${LABEL_WIDTH}s${RESET} %s\n" "$indent" "$label" "$value"
+}
+
+# Print a box's top border with a bracketed, optionally colored label
+# Usage: box_top_border "<label>" [color]
+# Renders "┌─[ <label> ]───...───┐" at exactly WIDTH columns. <label> is
+# measured as plain text and truncated if it would overflow the border;
+# color is applied only when writing the label, never counted toward width.
+box_top_border() {
+    local label="$1"
+    local color="$2"
+    local max_label=$((WIDTH - 7)) # "┌─[ " + " ]" + "┐" = 7 non-label chars
+
+    [ "${#label}" -gt "$max_label" ] && label="${label:0:max_label}"
+
+    local colored_label="$label"
+    [ -n "$color" ] && colored_label="${color}${label}${RESET}"
+
+    local dashes="${SEPARATOR_LINE:0:$((max_label - ${#label}))}"
+
+    printf '┌─[ %s ]%s┐\n' "$colored_label" "$dashes"
+}
+
+# Print a box's bottom border
+# Usage: box_bottom_border
+box_bottom_border() {
+    printf '└%s┘\n' "${SEPARATOR_LINE:0:$((WIDTH - 2))}"
+}
+
+# Print a box content line, padded to exactly WIDTH columns
+# Usage: box_line "<text>" [color]
+# <text> is measured as plain text (no ANSI) and truncated if it would
+# overflow the box; color is applied only on output, never counted toward
+# width. Call with no text for a blank line.
+box_line() {
+    local text="$1"
+    local color="$2"
+    local box_pad=5
+    local max_text=$((WIDTH - 2 - box_pad)) # both borders + left inner padding
+
+    [ "${#text}" -gt "$max_text" ] && text="${text:0:max_text}"
+
+    local colored_text="$text"
+    [ -n "$color" ] && colored_text="${color}${text}${RESET}"
+
+    local right_pad=$((WIDTH - 2 - box_pad - ${#text}))
+    printf '│%*s%s%*s│\n' "$box_pad" '' "$colored_text" "$right_pad" ''
 }
 ```
+
+Key behavior for `box_top_border`, `box_line`, and `box_bottom_border`: text is always measured as *plain* text (before any color codes are applied) and truncated on overflow, while color is applied only at output time and never counted toward width. This guarantees a box renders at exactly `WIDTH` columns regardless of how long (or short) the label/value text is.
+
+### Locale
+
+`common.sh` exports the locale before anything else runs:
+
+```bash
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+```
+
+This is load-bearing, not cosmetic. Bash substring expansion (`${var:0:n}`) and `${#var}` are character-based only in a UTF-8 locale; outside one they are byte-based, which slices the 3-byte box-drawing characters (`─`, `│`, `┌`, etc.) mid-character and produces mojibake in the borders. `C.UTF-8` is used (rather than `en_US.UTF-8`) because it is built into glibc on Ubuntu 22.04+ and needs no `locale-gen`, whereas `en_US.UTF-8` is frequently not generated on a headless server.
 
 ---
 
@@ -335,18 +443,17 @@ Display server identity in a compact, visually distinct box. Creates clear visua
 |----------|-------------|---------|
 | `NICKNAME` | Display name shown in box | `"Docker Host"` |
 
-Hostname obtained via: `$(hostname -f 2>/dev/null || hostname)`
-Short hostname for border: `$(hostname -s)`
+Hostname obtained via: `$(hostname -s 2>/dev/null || hostname)`. `-s` (short hostname) is used rather than `-f` (FQDN) because `-f` triggers a resolver lookup that can block SSH login when DNS is slow or unreachable.
 
 #### Display Format
 
 ```
-┌─[ srv1 ]────────────────────────────────────────────────┐
-│                                                         │
-│       Docker Host                                      │
-│       Ubuntu 24.04.1 LTS  •  6.8.0-49-generic          │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+┌─[ srv1 ]─────────────────────────────────────────────────┐
+│                                                          │
+│     Docker Host                                          │
+│     Ubuntu 24.04.1 LTS  •  6.8.0-49-generic              │
+│                                                          │
+└──────────────────────────────────────────────────────────┘
 ```
 
 #### Layout Specifications
@@ -370,7 +477,7 @@ Short hostname for border: `$(hostname -s)`
 
 #### Dependencies
 
-- `lsb_release` command (usually pre-installed on Ubuntu)
+- None beyond `/etc/os-release`, which the script sources directly (no `lsb_release` call). `$PRETTY_NAME` is read from it; if unset or missing, `OS_INFO` falls back to `"Unknown OS"`.
 
 ---
 
@@ -405,28 +512,28 @@ Comprehensive system health overview including reboot status, resource utilizati
 #### Display Format
 
 ```
-───────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────
 󰗶  SYSTEM HEALTH
 
-     Reboot required (kernel update)
+   󰜉 Reboot required (kernel update)
 
-     UPTIME & LOAD                           [  Healthy ]
-      System uptime:      25 days 9 hours
-      Load average:       0.42 (1m)  0.38 (5m)  0.35 (15m)
-      Processes:          243 active
+    UPTIME & LOAD                          [  Healthy ]
+      System uptime:       25 days 9 hours
+      Load average:        0.42 (1m)  0.38 (5m)  0.35 (15m)
+      Processes:           4 running / 243 total
 
-    󰍛 MEMORY
-      RAM                 [██████████░░░░░]  62%     10.8 / 16 GB
-      Swap                [░░░░░░░░░░░░░░░]   0%      0.0 / 4 GB
+   󰍛 MEMORY
+      RAM                  [█████████░░░░░░]  62%     10.8 / 16.0 GB
+      Swap                 [░░░░░░░░░░░░░░░]   0%     0.0 / 4.0 GB
 
-    󰋊 STORAGE
-      /                   [██░░░░░░░░░░░░░]  31%     65.8 / 438 GB
-       /mnt/media_data   [██████████████░]  89%    801.2 / 900 GB
+   󰋊 STORAGE
+      /                    [████░░░░░░░░░░░]  31%    65.8 / 438.0 GB
+       /mnt/media_data      [█████████████░░]  89%    801.2 / 900.0 GB
 
-    󰲝 NETWORK
-      Local IP:           192.168.1.10               
-      Tailnet IP:         100.123.12.321             
-      Public IP:          81.234.56.78
+   󰲝 NETWORK
+      Local IP:            192.168.1.10
+      Tailnet IP:          100.123.12.321   Connected
+      Public IP:           81.234.56.78
 ```
 
 #### Subsection: Reboot Required
@@ -482,7 +589,14 @@ Display rules:
 - Show all configured mount points
 - Skip mount points that don't exist
 - Warning icon (nf-fa-warning) prepended to label if ≥ 70%
+- The icon occupies a fixed 2-column slot that is blank when healthy, and the
+  label field is narrowed by the same 2 columns, so warning rows stay aligned
+  with healthy rows and with the Memory rows (bar always starts at column 27).
+  This assumes the Nerd Font glyph renders at single width; some builds draw
+  Private Use Area icons double-width, which would leave a 1-column drift
 - Values right-aligned
+
+Percentage definition: matches GNU `df`'s `Use%` exactly — `used / (used + available)`, i.e. it **excludes** the blocks `df` reserves for root, rounded **up** (ceiling), not truncated. The displayed `USED / TOTAL GB` figures still use `Size` (the filesystem's full block count, including the root-reserved blocks) as the total — exactly what `df -h` itself displays. The two denominators differ by the ~5% ext4 root reservation, so the displayed percentage and the displayed `USED / TOTAL` ratio will not exactly agree by naive division; this is intentional and matches `df`'s own behavior.
 
 Data source: `df -B1` for byte-accurate values
 
@@ -497,8 +611,12 @@ Data source: `df -B1` for byte-accurate values
 Display rules:
 - IPs shown in cyan
 - Show `{ICON_OK} Connected` next to IP for Local and Tailnet
-- Cache public IP if possible (slow to fetch)
+- Public IP is cached to avoid a network call on every login (slow to fetch)
 - If any IP unavailable, show fallback message in yellow
+
+Public IP cache: file `/run/motd-public-ip`, TTL 900 seconds (15 minutes). If the cache file exists and is younger than the TTL, its contents are printed directly instead of calling out to `ipinfo.io`.
+
+The cache lives in `/run` rather than `/tmp` deliberately: the MOTD script runs as root, and `/run` is root-owned tmpfs. `/tmp` is world-writable, so a world-writable cache location would let an unprivileged local user plant the file's contents, which root would then print, unverified, into the login banner. The tradeoff is that `/run` is tmpfs, so the cache is lost on every reboot (acceptable, since the first login after reboot simply pays the fetch cost once).
 
 ---
 

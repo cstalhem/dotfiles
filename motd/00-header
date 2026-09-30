@@ -5,24 +5,28 @@
 # Part of custom MOTD dashboard
 #
 
+# ==============================================================================
+# Source common functions
+# ==============================================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
 # Configuration
 NICKNAME="Home Server"
 
-# Colors
-readonly CYAN='\e[36m'
-readonly DIM='\e[2m'
-readonly RESET='\e[0m'
-
 # Get system info
-FORMAL_HOSTNAME=$(hostname -f 2>/dev/null || hostname)
-OS_INFO=$(lsb_release -ds 2>/dev/null || cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2)
+HOSTNAME_SHORT=$(hostname -s 2>/dev/null || hostname)
+OS_INFO=$(source /etc/os-release 2>/dev/null; echo "$PRETTY_NAME")
+OS_INFO="${OS_INFO:-Unknown OS}"
 KERNEL_INFO=$(uname -sr)
 
-# Print ASCII art banner in cyan
+# Print header box
 echo ""
-echo -e "┌─[${CYAN} ${FORMAL_HOSTNAME} ${RESET}]────────────────────────────────────────────────┐"
-echo "│                                                         │"
-echo "│     $NICKNAME                                        │"
-echo "│     ${OS_INFO}  •  ${KERNEL_INFO}      │"
-echo "│                                                         │"
-echo "└─────────────────────────────────────────────────────────┘"
+box_top_border "$HOSTNAME_SHORT" "$CYAN"
+box_line ""
+box_line "$NICKNAME" "${BOLD}${CYAN}"
+box_line "${OS_INFO}  •  ${KERNEL_INFO}" "$DIM"
+box_line ""
+box_bottom_border

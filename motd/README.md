@@ -1,990 +1,293 @@
-# MOTD Dashboard Requirements
+# MOTD Dashboard
 
-This document defines the requirements for a custom SSH login MOTD (Message of the Day) dashboard for a home server running Ubuntu.
+A custom SSH login MOTD (Message of the Day) for a home server running Ubuntu. It replaces Ubuntu's stock MOTD scripts with a single compact panel.
 
 ## Table of Contents
 
-- [Architecture Overview](#architecture-overview)
-- [Global Standards](#global-standards)
-  - [Layout and Dimensions](#layout-and-dimensions)
-  - [Color Palette](#color-palette)
-  - [Nerd Font Icons](#nerd-font-icons)
-  - [Progress Bar Standard](#progress-bar-standard)
-  - [Box Drawing Characters](#box-drawing-characters)
-  - [Shared Functions](#shared-functions)
-  - [Locale](#locale)
-- [Section Specifications](#section-specifications)
-  - [00-header](#00-header)
-  - [10-system-health](#10-system-health)
-  - [20-updates](#20-updates)
-  - [30-docker](#30-docker)
-  - [40-users](#40-users)
+- [Design Principles](#design-principles)
+- [Examples](#examples)
+- [Layout](#layout)
+- [Markers and Colour](#markers-and-colour)
+- [Panel Rows](#panel-rows)
+- [Alerts](#alerts)
+- [Coverage of Ubuntu's Stock MOTD](#coverage-of-ubuntus-stock-motd)
+- [Configuration](#configuration)
+- [Files](#files)
+- [Locale](#locale)
 - [Deployment](#deployment)
+- [Testing](#testing)
 
 ---
 
-## Architecture Overview
+## Design Principles
 
-### File Structure
-
-Each section is implemented as an independent executable bash script in `/etc/update-motd.d/`. Scripts are numbered to control execution order.
-
-| File | Section | Description |
-|------|---------|-------------|
-| `00-header` | Header | Box with nickname, hostname, OS info |
-| `10-system-health` | System Health | Uptime, load, memory, storage, network |
-| `20-updates` | Updates | Available apt package updates |
-| `30-docker` | Docker | Container status overview |
-| `40-users` | Users & Logins | Sessions, failed logins, recent activity |
-
-### Design Principles
-
-1. **Modularity**: Each section is independent and can be enabled/disabled by adding/removing execute permissions
-2. **Fail-safe**: If a section fails, it should not prevent other sections from displaying
-3. **Performance**: Scripts should execute quickly to avoid slowing down SSH login
-4. **Consistency**: Fixed width, consistent indentation, aligned columns throughout
-5. **Information density**: Show what matters, hide what doesn't (conditional display)
+1. **Quiet when healthy, loud when not.** A login banner is read in about two seconds. Its jobs are to answer *which machine am I on?* and *does anything need me?*
+2. **Colour is a signal, not decoration.** Healthy values use the terminal's default colour. Only warnings (yellow) and critical values (red) are coloured, so a problem is the only coloured thing on screen.
+3. **Readable without colour.** Every coloured value also carries a marker (`!` or `✗`) in a fixed column.
+4. **Fixed slots.** Every metric has the same position at every login, so you learn where to look.
+5. **Honour the width.** No line exceeds 60 columns. The panel must work in a phone SSH client or a split pane.
+6. **Plain Unicode only.** No Nerd Font icons. Box-drawing and block characters, `·`, `✓`, `!` and `✗` exist in every monospace font and render at single width.
+7. **Cheap and non-blocking.** Nothing at login may take more than about 2 seconds, even when a network share, Docker or the internet is unreachable. Expensive facts come from stamp files that other tools maintain.
 
 ---
 
-## Global Standards
+## Examples
 
-### Layout and Dimensions
-
-| Property | Value | Notes |
-|----------|-------|-------|
-| Total width | 60 characters | All sections respect this width |
-| Indent level 1 | 3 spaces | Main content indent |
-| Indent level 2 | 6 spaces | Sub-items |
-| Indent level 3 | 9 spaces | Detail items |
-| Label column | 20 characters | For aligned label: value pairs |
-| Progress bar width | 15 characters | Inside brackets |
-
-### Color Palette
-
-All scripts should use these standardized ANSI color codes for consistency.
-
-| Purpose | Color | ANSI Code | Escape Sequence | Usage |
-|---------|-------|-----------|-----------------|-------|
-| Reset | - | 0 | `\e[0m` | Reset to default after colored text |
-| Normal text | Default | 0 | `\e[0m` | Regular information |
-| Bold | - | 1 | `\e[1m` | Emphasis |
-| Dim | Gray | 2 | `\e[2m` | Labels, hints, less important info |
-| Section headers | Bold White | 1;37 | `\e[1;37m` | Section titles (e.g., "SYSTEM HEALTH") |
-| OK/Success | Green | 32 | `\e[32m` | Healthy values, checkmarks |
-| Warning | Yellow | 33 | `\e[33m` | Approaching thresholds |
-| Critical/Error | Red | 31 | `\e[31m` | Problems needing attention |
-| Accent/Highlight | Cyan | 36 | `\e[36m` | IPs, hostnames, container names |
-| Accent Alt | Blue | 34 | `\e[34m` | Secondary accent |
-
-#### Bash Color Variables
-
-Colors are defined with `$'...'` so each holds a real ESC byte rather than a
-literal `\e` sequence. This lets them render through plain `echo` and
-`printf '%s'`, so no output path needs `echo -e` or `printf '%b'` — which
-would also interpret backslashes appearing in *data* (hostnames, package
-names, `PRETTY_NAME`).
-
-```bash
-# Colors
-readonly RED=$'\e[31m'
-readonly GREEN=$'\e[32m'
-readonly YELLOW=$'\e[33m'
-readonly BLUE=$'\e[34m'
-readonly CYAN=$'\e[36m'
-readonly WHITE=$'\e[1;37m'
-readonly BOLD=$'\e[1m'
-readonly DIM=$'\e[2m'
-readonly RESET=$'\e[0m'
-```
-
-### Nerd Font Icons
-
-Scripts use Nerd Font icons for visual indicators. Icons are defined by their Nerd Font name for documentation clarity.
-
-#### Status Icons
-
-| Icon Name | Codepoint | Usage |
-|-----------|-----------|-------|
-| nf-fa-check | `\uf00c` | OK/Healthy status |
-| nf-fa-warning | `\uf071` | Warning state |
-| nf-fa-times_circle | `\uf05c` | Error/Critical state |
-| nf-oct-circle_slash | `\uf468` | Stopped/Inactive |
-| nf-fa-refresh | `\uf021` | Updates/Refresh |
-| nf-fa-shield | `\uf132` | Security |
-
-#### Section Icons
-
-| Icon Name | Codepoint | Section |
-|-----------|-----------|---------|
-| nf-md-heart_pulse | `\udb81\uddf6` | System Health section header |
-| nf-md-package_variant | `\udb80\udfd6` | Updates section header |
-| nf-md-docker | `\udb82\udc68` | Docker section header |
-| nf-fa-users | `\uf0c0` | Users section header |
-
-#### Subsection/Detail Icons
-
-| Icon Name | Codepoint | Usage |
-|-----------|-----------|-------|
-| nf-fa-clock_o | `\uf017` | Uptime & Load subsection |
-| nf-md-memory | `\udb80\udf5b` | Memory subsection |
-| nf-md-harddisk | `\udb80\udeca` | Storage subsection |
-| nf-md-network | `\udb83\udc9d` | Network subsection |
-| nf-fa-reboot / nf-md-restart | `\udb81\udf09` | Reboot required |
-| nf-fa-arrow_circle_o_up | `\uf01b` | Upgrade available |
-| nf-oct-container | `\uf4b7` | Container |
-| nf-fa-user | `\uf007` | User/Session |
-| nf-fa-ban | `\uf05e` | Failed login |
-| nf-fa-history | `\uf1da` | Recent activity |
-
-#### Bash Icon Variables
-
-```bash
-# Status Icons
-readonly ICON_OK=$''                 # nf-fa-check
-readonly ICON_WARN=$''               # nf-fa-warning
-readonly ICON_ERROR=$''              # nf-fa-times_circle
-readonly ICON_STOPPED=$''            # nf-oct-circle_slash
-readonly ICON_REFRESH=$''            # nf-fa-refresh
-
-# Section Icons
-readonly ICON_HEALTH=$'󰗶'             # nf-md-heart_pulse
-readonly ICON_UPDATES=$'󰏖'            # nf-md-package_variant
-readonly ICON_DOCKER=$'󰡨'             # nf-md-docker
-readonly ICON_USERS=$''              # nf-fa-users
-
-# Detail Icons
-readonly ICON_CLOCK=$''              # nf-fa-clock_o
-readonly ICON_MEMORY=$'󰍛'             # nf-md-memory
-readonly ICON_DISK=$'󰋊'               # nf-md-harddisk
-readonly ICON_NETWORK=$'󰲝'            # nf-md-network
-readonly ICON_REBOOT=$'󰜉'             # nf-md-restart
-readonly ICON_UPGRADE=$''            # nf-fa-arrow_circle_o_up
-readonly ICON_CONTAINER=$''          # nf-oct-container
-readonly ICON_USER=$''               # nf-fa-user
-readonly ICON_BAN=$''                # nf-fa-ban
-readonly ICON_HISTORY=$''            # nf-fa-history
-readonly ICON_SECURITY=$''           # nf-fa-shield
-```
-
-### Progress Bar Standard
-
-Progress bars provide a visual representation of resource usage.
-
-#### Appearance
+### A quiet day (12 lines)
 
 ```
-[██████████░░░░░]  62%
-```
-
-- Total width: 15 characters (inside brackets)
-- Filled character: `█` (U+2588 FULL BLOCK)
-- Empty character: `░` (U+2591 LIGHT SHADE)
-- Brackets: `[` and `]`
-- Percentage displayed after bar, right-aligned (3 chars)
-
-#### Color Rules for Progress Bars
-
-| Percentage | Color | Meaning |
-|------------|-------|---------|
-| 0-69% | Green | Normal/OK |
-| 70-84% | Yellow | Warning |
-| 85-100% | Red | Critical |
-
-#### Bash Function
-
-```bash
-# Generate a progress bar with color based on percentage
-# Usage: progress_bar <percentage> [warn_threshold] [crit_threshold]
-# Default thresholds: warn=70, crit=85
-# Output: [██████████░░░░░]  62%
-progress_bar() {
-    local percent=$1
-    local warn_threshold=${2:-70}
-    local crit_threshold=${3:-85}
-
-    # Clamp percent into 0..100 so out-of-range input can't produce a
-    # malformed slice or a negative empty count
-    [ "$percent" -lt 0 ] && percent=0
-    [ "$percent" -gt 100 ] && percent=100
-
-    local filled=$((percent * PROGRESS_BAR_WIDTH / 100))
-    local empty=$((PROGRESS_BAR_WIDTH - filled))
-
-    # Determine color based on percentage
-    local color
-    if [ "$percent" -ge "$crit_threshold" ]; then
-        color="$RED"
-    elif [ "$percent" -ge "$warn_threshold" ]; then
-        color="$YELLOW"
-    else
-        color="$GREEN"
-    fi
-
-    # Build the bar
-    local bar="${color}["
-    bar+="${PROGRESS_BAR_FILLED_CHARS:0:filled}"
-    bar+="${PROGRESS_BAR_EMPTY_CHARS:0:empty}"
-    bar+="]${RESET}"
-
-    printf "%s %3d%%" "$bar" "$percent"
-}
-```
-
-`PROGRESS_BAR_WIDTH`, `PROGRESS_BAR_FILLED_CHARS`, and `PROGRESS_BAR_EMPTY_CHARS` are precomputed constants (see [Shared Functions](#shared-functions)) so the function slices pre-built strings instead of spawning `printf`/`tr` subshells on every call.
-
-### Box Drawing Characters
-
-Consistent box drawing characters used throughout.
-
-| Character | Unicode | Name | Usage |
-|-----------|---------|------|-------|
-| `─` | U+2500 | Box horizontal | Horizontal lines |
-| `│` | U+2502 | Box vertical | Vertical borders |
-| `┌` | U+250C | Box down and right | Top-left corner |
-| `┐` | U+2510 | Box down and left | Top-right corner |
-| `└` | U+2514 | Box up and right | Bottom-left corner |
-| `┘` | U+2518 | Box up and left | Bottom-right corner |
-| `[` | - | Bracket | Header hostname wrapper |
-| `]` | - | Bracket | Header hostname wrapper |
-
-#### Section Separator
-
-```bash
-# Print section separator with icon and title
-# Usage: print_section_header "ICON" "TITLE"
-print_section_header() {
-    local icon="$1"
-    local title="$2"
-    echo ""
-    printf '%s\n' "$SEPARATOR_LINE"
-    echo "${WHITE}${icon}  ${title}${RESET}"
-    echo ""
-}
-```
-
-`SEPARATOR_LINE` is a precomputed constant (`WIDTH` `─` characters, see [Shared Functions](#shared-functions)) rather than a `seq`/`printf` subshell built on every call.
-
-### Shared Functions
-
-A common functions file (`lib/common.sh`, deployed to `/etc/update-motd.d/lib/common.sh`) is sourced by all scripts.
-
-```bash
-# /etc/update-motd.d/lib/common.sh (sourced, not executed)
-
-# Colors
-readonly RED=$'\e[31m'
-readonly GREEN=$'\e[32m'
-readonly YELLOW=$'\e[33m'
-readonly BLUE=$'\e[34m'
-readonly CYAN=$'\e[36m'
-readonly WHITE=$'\e[1;37m'
-readonly BOLD=$'\e[1m'
-readonly DIM=$'\e[2m'
-readonly RESET=$'\e[0m'
-
-# Layout
-readonly WIDTH=60
-readonly INDENT="   "
-readonly INDENT2="      "
-readonly INDENT3="         "
-readonly LABEL_WIDTH=20
-
-# Progress bar width and precomputed fill/empty character runs (avoids
-# spawning subprocesses in progress_bar; built once at source time)
-readonly PROGRESS_BAR_WIDTH=15
-printf -v _pb_fill '%*s' "$PROGRESS_BAR_WIDTH" ''
-readonly PROGRESS_BAR_FILLED_CHARS="${_pb_fill// /█}"
-printf -v _pb_empty '%*s' "$PROGRESS_BAR_WIDTH" ''
-readonly PROGRESS_BAR_EMPTY_CHARS="${_pb_empty// /░}"
-unset _pb_fill _pb_empty
-
-# Precomputed horizontal separator line (WIDTH '─' characters)
-printf -v _sep '%*s' "$WIDTH" ''
-readonly SEPARATOR_LINE="${_sep// /─}"
-unset _sep
-
-# Generate a progress bar with color based on percentage
-# Usage: progress_bar <percentage> [warn_threshold] [crit_threshold]
-# Default thresholds: warn=70, crit=85
-# Output: [██████████░░░░░]  62%
-progress_bar() {
-    local percent=$1
-    local warn_threshold=${2:-70}
-    local crit_threshold=${3:-85}
-
-    # Clamp percent into 0..100 so out-of-range input can't produce a
-    # malformed slice or a negative empty count
-    [ "$percent" -lt 0 ] && percent=0
-    [ "$percent" -gt 100 ] && percent=100
-
-    local filled=$((percent * PROGRESS_BAR_WIDTH / 100))
-    local empty=$((PROGRESS_BAR_WIDTH - filled))
-
-    # Determine color based on percentage
-    local color
-    if [ "$percent" -ge "$crit_threshold" ]; then
-        color="$RED"
-    elif [ "$percent" -ge "$warn_threshold" ]; then
-        color="$YELLOW"
-    else
-        color="$GREEN"
-    fi
-
-    # Build the bar
-    local bar="${color}["
-    bar+="${PROGRESS_BAR_FILLED_CHARS:0:filled}"
-    bar+="${PROGRESS_BAR_EMPTY_CHARS:0:empty}"
-    bar+="]${RESET}"
-
-    printf "%s %3d%%" "$bar" "$percent"
-}
-
-# Print section separator with icon and title
-# Usage: print_section_header "ICON" "TITLE"
-print_section_header() {
-    local icon="$1"
-    local title="$2"
-    echo ""
-    printf '%s\n' "$SEPARATOR_LINE"
-    echo "${WHITE}${icon}  ${title}${RESET}"
-    echo ""
-}
-
-# Print a label: value line with consistent alignment
-# Usage: print_line "Label:" "value" [indent]
-# Default indent is INDENT (3 spaces)
-print_line() {
-    local label="$1"
-    local value="$2"
-    local indent="${3:-$INDENT}"
-    printf "%s${DIM}%-${LABEL_WIDTH}s${RESET} %s\n" "$indent" "$label" "$value"
-}
-
-# Print a box's top border with a bracketed, optionally colored label
-# Usage: box_top_border "<label>" [color]
-# Renders "┌─[ <label> ]───...───┐" at exactly WIDTH columns. <label> is
-# measured as plain text and truncated if it would overflow the border;
-# color is applied only when writing the label, never counted toward width.
-box_top_border() {
-    local label="$1"
-    local color="$2"
-    local max_label=$((WIDTH - 7)) # "┌─[ " + " ]" + "┐" = 7 non-label chars
-
-    [ "${#label}" -gt "$max_label" ] && label="${label:0:max_label}"
-
-    local colored_label="$label"
-    [ -n "$color" ] && colored_label="${color}${label}${RESET}"
-
-    local dashes="${SEPARATOR_LINE:0:$((max_label - ${#label}))}"
-
-    printf '┌─[ %s ]%s┐\n' "$colored_label" "$dashes"
-}
-
-# Print a box's bottom border
-# Usage: box_bottom_border
-box_bottom_border() {
-    printf '└%s┘\n' "${SEPARATOR_LINE:0:$((WIDTH - 2))}"
-}
-
-# Print a box content line, padded to exactly WIDTH columns
-# Usage: box_line "<text>" [color]
-# <text> is measured as plain text (no ANSI) and truncated if it would
-# overflow the box; color is applied only on output, never counted toward
-# width. Call with no text for a blank line.
-box_line() {
-    local text="$1"
-    local color="$2"
-    local box_pad=5
-    local max_text=$((WIDTH - 2 - box_pad)) # both borders + left inner padding
-
-    [ "${#text}" -gt "$max_text" ] && text="${text:0:max_text}"
-
-    local colored_text="$text"
-    [ -n "$color" ] && colored_text="${color}${text}${RESET}"
-
-    local right_pad=$((WIDTH - 2 - box_pad - ${#text}))
-    printf '│%*s%s%*s│\n' "$box_pad" '' "$colored_text" "$right_pad" ''
-}
-```
-
-Key behavior for `box_top_border`, `box_line`, and `box_bottom_border`: text is always measured as *plain* text (before any color codes are applied) and truncated on overflow, while color is applied only at output time and never counted toward width. This guarantees a box renders at exactly `WIDTH` columns regardless of how long (or short) the label/value text is.
-
-### Locale
-
-`common.sh` exports the locale before anything else runs:
-
-```bash
-export LANG=C.UTF-8
-export LC_ALL=C.UTF-8
-```
-
-This is load-bearing, not cosmetic. Bash substring expansion (`${var:0:n}`) and `${#var}` are character-based only in a UTF-8 locale; outside one they are byte-based, which slices the 3-byte box-drawing characters (`─`, `│`, `┌`, etc.) mid-character and produces mojibake in the borders. `C.UTF-8` is used (rather than `en_US.UTF-8`) because it is built into glibc on Ubuntu 22.04+ and needs no `locale-gen`, whereas `en_US.UTF-8` is frequently not generated on a headless server.
-
----
-
-## Section Specifications
-
-### 00-header
-
-#### Purpose
-
-Display server identity in a compact, visually distinct box. Creates clear visual separation from previous terminal content.
-
-#### Content
-
-1. **Box with hostname**: Short hostname in top border
-2. **Nickname**: Display name for the server (e.g., "Docker Host")
-3. **OS Information**: Distribution and kernel version on one line
-
-#### Configuration
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `NICKNAME` | Display name shown in box | `"Docker Host"` |
-
-Hostname obtained via: `$(hostname -s 2>/dev/null || hostname)`. `-s` (short hostname) is used rather than `-f` (FQDN) because `-f` triggers a resolver lookup that can block SSH login when DNS is slow or unreachable.
-
-#### Display Format
-
-```
-┌─[ srv1 ]─────────────────────────────────────────────────┐
-│                                                          │
-│     Docker Host                                          │
-│     Ubuntu 24.04.1 LTS  •  6.8.0-49-generic              │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
-```
-
-#### Layout Specifications
-
-| Element | Specification |
-|---------|---------------|
-| Box width | 60 characters (including borders) |
-| Inner padding | 5 spaces from left border to text |
-| Hostname in border | Surrounded by `[ ]`, positioned after `┌─` |
-| Nickname | Bold cyan |
-| OS line | Dim; distro and kernel separated by ` • ` |
-
-#### Colors
-
-| Element | Color |
-|---------|-------|
-| Box borders | Default |
-| Hostname in border | Cyan |
-| Nickname | Bold Cyan |
-| OS info line | Dim |
-
-#### Dependencies
-
-- None beyond `/etc/os-release`, which the script sources directly (no `lsb_release` call). `$PRETTY_NAME` is read from it; if unset or missing, `OS_INFO` falls back to `"Unknown OS"`.
-
----
-
-### 10-system-health
-
-#### Purpose
-
-Comprehensive system health overview including reboot status, resource utilization, storage, and network information.
-
-#### Content
-
-1. **Reboot Required Alert** (conditional): Only shown if reboot needed
-2. **Uptime & Load**: System uptime, load averages with health badge
-3. **Memory**: RAM and Swap usage with progress bars
-4. **Storage**: Configured mount points with progress bars
-5. **Network**: Local IP, Tailscale IP, Public IP
-
-#### Configuration
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `MOUNT_POINTS` | Array of mount points to monitor | `("/" "/mnt/media_data")` |
-| `MOUNT_LABELS` | Associative array of labels | `(["/"]="/" ["/mnt/media_data"]="/mnt/media_data")` |
-
-##### Initial Mount Configuration
-
-| Mount Point | Label |
-|-------------|-------|
-| `/` | `/` |
-| `/mnt/media_data` | `/mnt/media_data` |
-
-#### Display Format
-
-```
+srv1 · Home Server                                 up 1d 16h
+Ubuntu 24.04.5 LTS · Linux 6.8.0-142-generic
 ────────────────────────────────────────────────────────────
-󰗶  SYSTEM HEALTH
+  load   1.04 0.91 0.87 (8c)      temp    72°C
+  procs  488                      docker  43 · 21 healthy
 
-   󰜉 Reboot required (kernel update)
+  ram    ██████░░░░░░░░░   44%     6.9 / 15.5 GiB
+  swap   ███████░░░░░░░░   50%     2.0 /  4.0 GiB
+  /      ████░░░░░░░░░░░   30%     127 /  455 GiB
+  media  ██████████░░░░░   65%     3.5 /  5.4 TiB
 
-    UPTIME & LOAD                          [  Healthy ]
-      System uptime:       25 days 9 hours
-      Load average:        0.42 (1m)  0.38 (5m)  0.35 (15m)
-      Processes:           4 running / 243 total
-
-   󰍛 MEMORY
-      RAM                  [█████████░░░░░░]  62%     10.8 / 16.0 GB
-      Swap                 [░░░░░░░░░░░░░░░]   0%     0.0 / 4.0 GB
-
-   󰋊 STORAGE
-      /                    [████░░░░░░░░░░░]  31%    65.8 / 438.0 GB
-       /mnt/media_data      [█████████████░░]  89%    801.2 / 900.0 GB
-
-   󰲝 NETWORK
-      Local IP:            192.168.1.10
-      Tailnet IP:          100.123.12.321   Connected
-      Public IP:           81.234.56.78
+  lan    192.168.0.201            tailnet 100.97.193.76
+  wan    78.73.121.212
 ```
 
-#### Subsection: Reboot Required
-
-| Condition | Display |
-|-----------|---------|
-| Reboot required | Show: `{ICON_WARN} Reboot required (reason)` in yellow |
-| No reboot needed | Hide this line entirely |
-
-Detection: Check for `/var/run/reboot-required` file. Reason from `/var/run/reboot-required.pkgs`.
-
-#### Subsection: Uptime & Load
-
-##### Health Badge
-
-| Load per Core | Badge | Color |
-|---------------|-------|-------|
-| < 0.70 | `[ {ICON_OK} Healthy ]` | Green |
-| 0.70 - 0.99 | `[ {ICON_WARN} Elevated ]` | Yellow |
-| ≥ 1.00 | `[ {ICON_ERROR} High ]` | Red |
-
-Load per core = 1-minute load / number of CPU cores (from `nproc`).
-
-##### Data Sources
-
-| Metric | Source |
-|--------|--------|
-| Uptime | `/proc/uptime` parsed to days/hours |
-| Load | `/proc/loadavg` |
-| CPU cores | `nproc` |
-| Processes | Fourth field of `/proc/loadavg` |
-
-#### Subsection: Memory
-
-| Metric | Warning (Yellow) | Critical (Red) |
-|--------|------------------|----------------|
-| RAM % | ≥ 70% | ≥ 85% |
-| Swap % | ≥ 50% | ≥ 75% |
-
-Format: `[progress_bar] XX%    USED / TOTAL GB`
-
-Data source: `/proc/meminfo` or `free -b`
-
-#### Subsection: Storage
-
-| Metric | Warning (Yellow) | Critical (Red) |
-|--------|------------------|----------------|
-| Disk % | ≥ 70% | ≥ 85% |
-
-Format: `MOUNT_LABEL    [progress_bar] XX%    USED / TOTAL GB`
-
-Display rules:
-- Show all configured mount points
-- Skip mount points that don't exist
-- Warning icon (nf-fa-warning) prepended to label if ≥ 70%
-- The icon occupies a fixed 2-column slot that is blank when healthy, and the
-  label field is narrowed by the same 2 columns, so warning rows stay aligned
-  with healthy rows and with the Memory rows (bar always starts at column 27).
-  This assumes the Nerd Font glyph renders at single width; some builds draw
-  Private Use Area icons double-width, which would leave a 1-column drift
-- Values right-aligned
-
-Percentage definition: matches GNU `df`'s `Use%` exactly — `used / (used + available)`, i.e. it **excludes** the blocks `df` reserves for root, rounded **up** (ceiling), not truncated. The displayed `USED / TOTAL GB` figures still use `Size` (the filesystem's full block count, including the root-reserved blocks) as the total — exactly what `df -h` itself displays. The two denominators differ by the ~5% ext4 root reservation, so the displayed percentage and the displayed `USED / TOTAL` ratio will not exactly agree by naive division; this is intentional and matches `df`'s own behavior.
-
-Data source: `df -B1` for byte-accurate values
-
-#### Subsection: Network
-
-| Item | Source | Fallback |
-|------|--------|----------|
-| Local IP | `ip route get 1.1.1.1 \| grep -oP 'src \K[\d.]+'` | `hostname -I \| awk '{print $1}'` |
-| Tailnet IP | `tailscale ip -4 2>/dev/null` | Show `Not connected` in yellow |
-| Public IP | `curl -s --max-time 2 ipinfo.io/ip` | Show `Unable to detect` in yellow |
-
-Display rules:
-- IPs shown in cyan
-- Show `{ICON_OK} Connected` next to IP for Local and Tailnet
-- Public IP is cached to avoid a network call on every login (slow to fetch)
-- If any IP unavailable, show fallback message in yellow
-
-Public IP cache: file `/run/motd-public-ip`, TTL 900 seconds (15 minutes). If the cache file exists and is younger than the TTL, its contents are printed directly instead of calling out to `ipinfo.io`.
-
-The cache lives in `/run` rather than `/tmp` deliberately: the MOTD script runs as root, and `/run` is root-owned tmpfs. `/tmp` is world-writable, so a world-writable cache location would let an unprivileged local user plant the file's contents, which root would then print, unverified, into the login banner. The tradeoff is that `/run` is tmpfs, so the cache is lost on every reboot (acceptable, since the first login after reboot simply pays the fetch cost once).
-
----
-
-### 20-updates
-
-#### Purpose
-
-Show available system updates with special attention to security updates and Ubuntu version upgrades.
-
-#### Content
-
-1. **Ubuntu Upgrade Available** (conditional): Only if new Ubuntu version available
-2. **Update Summary**: Count of available updates broken down by type
-3. **Recent Packages**: Names of a few packages with updates
-4. **Command Hints**: How to view and install updates (only when updates available)
-
-#### Display Format
-
-##### When updates available:
+### A typical day
 
 ```
-───────────────────────────────────────────────────────────
-󰏖  UPDATES
+srv1 · Home Server                                 up 1d 16h
+Ubuntu 24.04.5 LTS · Linux 6.8.0-142-generic
+────────────────────────────────────────────────────────────
+  load   1.04 0.91 0.87 (8c)      temp    72°C
+! procs  488 · 3 zombies          docker  43 · 21 healthy
 
-    Ubuntu 24.10 available for upgrade
+  ram    ██████░░░░░░░░░   44%     6.9 / 15.5 GiB
+  swap   ███████░░░░░░░░   50%     2.0 /  4.0 GiB
+  /      ████░░░░░░░░░░░   30%     127 /  455 GiB
+✗ media  █████████████░░   90%     4.8 /  5.4 TiB
 
-   󰏖 23 package updates available
-       5 security updates
-      󰏖 18 standard updates
-
-   Most recent packages: docker-ce, tailscale, libgnu-4
-
-   To view updates:
-      Security only:     apt list --upgradable | grep -i security
-      All updates:       apt list --upgradable
-
-   Install all updates:  sudo apt update && sudo apt upgrade
+  lan    192.168.0.201            tailnet 100.97.193.76
+  wan    78.73.121.212
+────────────────────────────────────────────────────────────
+! 7 updates · apt list --upgradable
 ```
 
-##### When no updates available:
+### A bad day
 
 ```
-───────────────────────────────────────────────────────────
-󰏖  UPDATES
+srv1 · Home Server                                 up 3h 12m
+Ubuntu 24.04.5 LTS · Linux 6.8.0-142-generic
+────────────────────────────────────────────────────────────
+✗ load   9.84 7.12 4.03 (8c)    ✗ temp    91°C
+! procs  512 · 14 zombies       ✗ docker  43 · 2 unhealthy
 
-    System is up to date
-```
+✗ ram    █████████████░░   93%    14.4 / 15.5 GiB
+✗ swap   ████████████░░░   81%     3.2 /  4.0 GiB
+! /      ███████████░░░░   76%     346 /  455 GiB
+✗ media  ██████████████░   97%     5.3 /  5.4 TiB
 
-#### Display Rules
-
-| Condition | Behavior |
-|-----------|----------|
-| Ubuntu upgrade available | Show upgrade line with nf-fa-arrow_up icon, yellow |
-| Security updates > 0 | Show security count with nf-fa-shield icon, red |
-| Standard updates > 0 | Show count, yellow if > 0 |
-| No updates | Show "System is up to date" with nf-fa-check icon, green |
-| Updates available | Show recent packages (up to 3) and command hints |
-| No updates | Hide command hints |
-
-#### Data Sources
-
-| Metric | Source |
-|--------|--------|
-| Ubuntu upgrade | `/var/lib/update-notifier/release-upgrade-available` or `do-release-upgrade -c` |
-| Update count | `apt-get -s upgrade 2>/dev/null \| grep -c "^Inst"` |
-| Security count | Parse from `/var/lib/update-notifier/updates-available` or filter apt output |
-| Package names | `apt list --upgradable 2>/dev/null \| tail -n +2 \| cut -d'/' -f1 \| head -3` |
-
----
-
-### 30-docker
-
-#### Purpose
-
-Overview of Docker container fleet with health status breakdown.
-
-#### Content
-
-1. **Container Counts**: Running and stopped totals
-2. **Health Breakdown**: Healthy, unhealthy, no healthcheck counts
-3. **Unhealthy List** (conditional): Names of unhealthy containers
-
-#### Display Format
-
-##### With unhealthy containers:
-
-```
-───────────────────────────────────────────────────────────
-󰡨 DOCKER
-
-   Containers
-      Running:            28
-      Stopped:             3
-      
-      Health status:
-         Healthy:         19  
-         Unhealthy:        1
-      No healthcheck:     11
-      
-      Unhealthy:
-         portainer, traefik, pihole
-```
-
-##### All healthy, no issues:
-
-```
-───────────────────────────────────────────────────────────
-󰡨 DOCKER
-
-   Containers
-      Running:            28
-      Stopped:             0
-      
-      Health status:
-         Healthy:         19  
-      No healthcheck:      9
-```
-
-##### Docker not running
-
-```
-───────────────────────────────────────────────────────────
-󰡨 DOCKER
-
-    Docker not running
-```
-
-#### Container State Definitions
-
-| State | Definition |
-|-------|------------|
-| Running | Container is up, regardless of health status |
-| Stopped | Container is exited/stopped |
-| Healthy | Running + healthcheck passing |
-| Unhealthy | Running + healthcheck failing |
-| No healthcheck | Running + no healthcheck defined |
-
-Relationship: `Running = Healthy + Unhealthy + No healthcheck`
-
-#### Display Rules
-
-| Condition | Behavior |
-|-----------|----------|
-| Stopped > 0 | Show count in yellow |
-| Healthy > 0 | Show count in green with nf-fa-check |
-| Unhealthy > 0 | Show count in red with nf-fa-times_circle, list container names |
-| Docker not running | Show error: "Docker daemon not running" in red |
-
-#### Unhealthy Container List
-
-- Show all unhealthy container names
-- Names in cyan
-- Comma-separated on single line
-- Wrap to next line if exceeds width (60 chars)
-- Indented under "Unhealthy:" label
-
-#### Data Sources
-
-```bash
-# Check Docker running
-docker info &>/dev/null
-
-# Total containers
-docker ps -a --format '{{.ID}}' | wc -l
-
-# Running containers
-docker ps --format '{{.ID}}' | wc -l
-
-# Stopped containers
-docker ps -a --filter "status=exited" --format '{{.ID}}' | wc -l
-
-# Healthy containers
-docker ps --filter "health=healthy" --format '{{.ID}}' | wc -l
-
-# Unhealthy containers
-docker ps --filter "health=unhealthy" --format '{{.Names}}'
-
-# Containers with no healthcheck (running minus healthy minus unhealthy)
-# Or: docker inspect with health check filtering
+  lan    192.168.0.201          ! tailnet not connected
+! wan    unable to detect
+────────────────────────────────────────────────────────────
+✗ unhealthy: traefik, immich-server
+✗ 3 security updates · sudo apt upgrade
+! reboot required (linux-image-6.8.0-145-generic)
+! 3 failed ssh logins (24h) · 192.168.0.12
+! 12 other updates · apt list --upgradable
+! Ubuntu 26.04 LTS available · do-release-upgrade
 ```
 
 ---
 
-### 40-users
+## Layout
 
-#### Purpose
+| Element | Rule |
+|---------|------|
+| Width | 60 columns maximum, for every line |
+| Row marker | Column 0 |
+| Left slot label | Column 2, 7-character field |
+| Right slot marker | Column 32 |
+| Right slot label / used-total figures | Column 34 (`GUTTER`). Right-hand slots and the bars' used/total figures share this vertical line |
+| Right slot label field | 8 characters |
+| Left slot value budget | 22 characters (truncated beyond) |
+| Right slot value budget | 18 characters (truncated beyond) |
+| Bar | 15 characters, `█` filled, `░` empty (dim), no brackets |
+| Alert text budget | 58 characters, truncated with `…` |
 
-Security-focused view of current sessions, failed login attempts, and recent login activity.
+The order of the output, top to bottom:
 
-#### Content
+1. **Header.** Bold hostname, nickname and uptime on line 1. OS and kernel (dim) on line 2. Then a rule.
+2. **Slot rows.** `load | temp` and `procs | docker`.
+3. A blank line, then **bar rows**: `ram`, `swap` (hidden if there is no swap) and each configured mount.
+4. A blank line, then **network rows**: `lan | tailnet` and `wan`.
+5. **Alert block.** A rule, then the alerts. The whole block is omitted when there are no alerts.
 
-1. **Active Sessions**: Currently logged in users with details
-2. **Failed Logins** (conditional): Failed attempts in last 24h from fail2ban
-3. **Recent Activity**: Last 5 login sessions
+A value that doesn't fit its slot's budget gets its own row. Paired slots are for short values only.
 
-#### Display Format
+Sizes are binary units (GiB, or TiB when the total is at least 1000 GiB). Values below 100 are shown with one decimal, larger values as integers.
 
-##### With failed logins:
+---
+
+## Markers and Colour
+
+| Status | Marker | Colour | Meaning |
+|--------|--------|--------|---------|
+| ok | *(blank)* | Default | Nothing to do |
+| warn | `!` | Yellow | Worth knowing, or approaching a limit |
+| crit | `✗` | Red | Needs attention |
+
+The marker and the slot's value (or the bar and its percentage) take the status colour. Labels always stay in the default colour, so rows remain readable. Reading down column 0 shows every problem on screen.
+
+Other colours: the hostname is bold, the OS line and the empty part of bars are dim. Nothing else is styled.
+
+---
+
+## Panel Rows
+
+| Row | Value | Source | Warn | Crit |
+|-----|-------|--------|------|------|
+| `load` | 1, 5 and 15-minute load, core count | `/proc/loadavg`, `nproc` | 5-min load per core ≥ 0.70 | ≥ 1.00 |
+| `temp` | Hottest thermal zone | `/sys/class/thermal/thermal_zone*/temp` (same as landscape-sysinfo) | ≥ 80 °C | ≥ 90 °C |
+| `procs` | Process count, plus zombies if any | `ps -eo stat=` (processes, not threads) | Any zombie | – |
+| `docker` | Running containers · healthy count, or · unhealthy count | `docker ps -a` (2s timeout) | – | Any unhealthy or restarting, or daemon not responding |
+| `ram` | Used / total | `/proc/meminfo`, used = `MemTotal − MemAvailable` | ≥ 70% | ≥ 85% |
+| `swap` | Used / total | `/proc/meminfo` | ≥ 50%, **only while RAM is warn or worse** | ≥ 75%, same condition |
+| mounts | Used / size | `df -B1` (2s timeout) | ≥ 70% | ≥ 85% |
+| `lan` | Source address of the default route | `ip route get 1.1.1.1`, fallback `hostname -I` | Not detected | – |
+| `tailnet` | Tailscale IPv4 | `tailscale ip -4`. The slot is hidden if Tailscale isn't installed | Not connected | – |
+| `wan` | Public IP | `ipinfo.io`, cached | Not detected | – |
+
+Notes:
+
+- **Load** is judged on the 5-minute average, because the 1-minute average spikes from the login itself.
+- **Swap** in use is normal on Linux (idle pages get moved out), so swap is only judged when RAM is under pressure.
+- **Disk percentage** matches GNU `df`'s `Use%` exactly: `used / (used + available)`. That excludes the blocks reserved for root, and it is rounded up. The used/total figures use the filesystem's full size, as `df -h` does. The two therefore differ by the roughly 5% ext4 root reservation, which is intentional.
+- **Unreachable mounts.** A configured mount that doesn't answer within 2 seconds shows `! <label> unreachable` instead of a bar. `df` is read through `read -t`, not `timeout`: a process blocked in the kernel on a dead CIFS/NFS share ignores signals, but `read -t` returns anyway and leaves the stuck `df` behind without waiting for it.
+- **Docker.** Containers that exited with code 0 are finished jobs, not failures. Only non-zero exits and `dead` containers are reported (as alerts).
+- **Public IP cache.** The cache is `/run/motd-public-ip`, with a TTL of 15 minutes. It lives in `/run` (root-owned tmpfs) rather than world-writable `/tmp`, so no unprivileged user can plant text that root then prints into the login banner. The cost is one fresh fetch after each reboot. A response that isn't an IP address, such as a captive portal page, is discarded.
+
+---
+
+## Alerts
+
+Alerts are for **events and facts that have no slot**. A problem that has a slot lights up in place; an alert is only added when the slot can't say enough, for example which containers are unhealthy.
+
+All crit alerts print before all warn alerts. Within each group they appear in this order:
+
+| # | Alert | Level | Source |
+|---|-------|-------|--------|
+| 1 | `unhealthy: <names>` | crit | `docker ps` |
+| 2 | `restarting: <names>` | crit | `docker ps` |
+| 3 | `N security updates · sudo apt upgrade` | crit | Stamp: `/var/lib/update-notifier/updates-available` |
+| 4 | `<mount> is N% full · used / size` | crit | Any local filesystem (ext2/3/4, xfs, btrfs, zfs, vfat) **not** shown as a bar, at ≥ 85% |
+| 5 | `reboot required (<package>)` | warn | `/var/run/reboot-required`, `.pkgs` |
+| 6 | `N failed ssh logins (24h) · <sources>` | warn | `journalctl -u ssh`, one per connection sshd gave up on |
+| 7 | `N users logged in: <users>` | warn | `who`, when more than one distinct user is logged in |
+| 8 | `exited with error: <names>` | warn | `docker ps` |
+| 9 | `N (other) updates · apt list --upgradable` | warn | Stamp: `updates-available` |
+| 10 | `update list is N days old · sudo apt update` | warn | `updates-available` stamp older than 7 days, meaning the apt timer is broken and the counts are stale |
+| 11 | `N updates kept back by unattended-upgrades` | warn | `/var/lib/unattended-upgrades/kept-back` |
+| 12 | `<device> will be checked for errors at next reboot` | warn | Helper: `update-motd-fsck-at-reboot` (root only) |
+| 13 | fwupd's notice | warn | `/run/motd.d/85-fwupd` |
+| 14 | HWE end-of-life notice | warn | Helper: `update-motd-hwe-eol` (only while its stamp is under a day old) |
+| 15 | `Ubuntu <version> available · do-release-upgrade` | warn | Helper: `release-upgrade-motd` (root only) |
+
+**Failed logins.** The box is only reachable over the LAN and Tailscale, so any failed login comes from inside the network and is worth seeing. There is no fail2ban. A failure is counted from the line sshd logs when it gives up on a connection (`Connection closed by` / `Disconnected from` / `Disconnecting` + `authenticating user` / `invalid user`), which gives one count per failed connection regardless of the auth method. Aborting a passphrase prompt also produces such a line, and is counted.
+
+### Producers and presenters
+
+Ubuntu separates **producers** (apt hooks, timers and daemons that write stamp files) from **presenters** (the scripts in `/etc/update-motd.d` that print them). This dashboard replaces the presenters and keeps the producers:
+
+- **Stamps read directly** where an independent producer keeps them fresh:
+  - updates, written by the `99update-notifier` apt hook after every `apt update`
+  - reboot-required, written by package postinst scripts
+  - kept-back, written by unattended-upgrades
+  - fwupd, written by fwupd
+- **Helpers called and their output reformatted** where the stock presenter refreshes its own stamp when it runs: release upgrade, fsck and HWE. Reading those stamps directly would let the alerts go stale once the stock scripts are disabled. The stock scripts' guards are kept, such as root-only and the HWE stamp age.
+
+No `apt` command ever runs at login.
+
+---
+
+## Coverage of Ubuntu's Stock MOTD
+
+| Stock data point | Here |
+|------------------|------|
+| OS, kernel | Header |
+| System load, temperature, processes, zombies | Slots |
+| Memory, swap, usage of `/` | Bars |
+| Any filesystem ≥ 85% | Alert #4 (and bars for configured mounts) |
+| IPv4 per interface | `lan` (plus `tailnet`, `wan`) |
+| Users logged in | Alert #7, only when it isn't just you |
+| Updates, security updates, stale update list | Alerts #3, #9, #10 |
+| Release upgrade, reboot, fsck, HWE, fwupd, unattended-upgrades | Alerts |
+| Last login, mail | Unchanged: printed by sshd / `pam_mail`, not by MOTD scripts |
+| *Deliberately dropped:* architecture, "as of" timestamp, IPv6, help links, motd-news, ESM/Pro status, Landscape link, overlayroot | – |
+
+---
+
+## Configuration
+
+At the top of `10-dashboard`:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `NICKNAME` | Display name in the header | `"Home Server"` |
+| `MOUNT_POINTS` | Mounts shown as bars | `("/" "/mnt/media_data")` |
+| `MOUNT_LABELS` | Bar labels, at most 6 characters. Falls back to the (truncated) path | `(["/mnt/media_data"]="media")` |
+| `PUBLIC_IP_CACHE_FILE`, `PUBLIC_IP_CACHE_TTL` | Public IP cache | `/run/motd-public-ip`, `900` |
+
+---
+
+## Files
 
 ```
-───────────────────────────────────────────────────────────
- USERS & LOGINS
-
-   Active sessions:            1
-         calle @ 192.168.1.50     Mon Dec 16 14:22
-
-     Failed logins (24h):        3 attempts
-         root (x2)                203.0.113.42
-         admin (x1)               198.51.100.23
-
-     Recent activity:
-         admin                    Mon Dec 16 14:23  →  present
-         admin                    Mon Dec 16 09:15  →  12:33  (3h 18m)
-         backup                   Sun Dec 15 02:00  →  02:15  (15m)
+motd/
+├── lib/
+│   └── common.sh     # Rendering helpers: markers, rows, bars, alerts (sourced)
+├── 10-dashboard      # Data collection and layout
+└── README.md
 ```
 
-##### No failed logins:
+This is a single script rather than one script per section. The alert block collects facts from every part of the panel and prints them ordered by severity, and that needs all the data in one process. `common.sh` knows how to draw; `10-dashboard` knows where data comes from.
 
-```
-───────────────────────────────────────────────────────────
- USERS & LOGINS
+---
 
-   Active sessions:               2
-         calle @ 192.168.1.50     Mon Dec 16 14:22
-         admin @ console          Mon Dec 16 08:00
+## Locale
 
-   Recent activity:
-         admin                    Mon Dec 16 14:23  →  present
-         calle                    Mon Dec 16 09:15  →  12:33  (3h 18m)
-         backup                   Sun Dec 15 02:00  →  02:15  (15m)
-```
-
-#### Subsection: Active Sessions
-
-Format: `USERNAME @ SOURCE     DATETIME`
-
-| Element | Color |
-|---------|-------|
-| Username | Cyan (yellow if root) |
-| Source (IP/tty) | Dim |
-| Datetime | Dim |
-
-Data source: `who`
-
-#### Subsection: Failed Logins (Conditional)
-
-Only displayed if failed login count > 0.
-
-| Condition | Display |
-|-----------|---------|
-| Failed logins > 0 | Show with nf-fa-ban icon, yellow header |
-| Failed logins = 0 | Hide entire subsection |
-
-Format: Grouped by username with count, showing source IP
-
-Data source: fail2ban logs
-- Primary: `fail2ban-client status sshd`
-- Fallback: Parse `/var/log/fail2ban.log`
-- Alternative: Parse `/var/log/auth.log` for "Failed password"
-
-#### Subsection: Recent Activity
-
-Show last 5 login sessions (configurable).
-
-Format: `USERNAME     DATETIME_START  →  DATETIME_END  (DURATION)`
-
-| State | End Time Display |
-|-------|------------------|
-| Still logged in | `present` |
-| Logged out | End time + duration |
-
-| Element | Color |
-|---------|-------|
-| Username | Cyan (yellow if root) |
-| Times | Default |
-| Duration | Dim |
-
-Data source: `last -n 5 -w`
+`common.sh` exports `LANG=C.UTF-8` and `LC_ALL=C.UTF-8` before anything else runs. This is load-bearing, not cosmetic. Bash substring expansion (`${var:0:n}`) and `${#var}` are character-based only in a UTF-8 locale; outside one they are byte-based, which slices the multi-byte characters (`─`, `█`, `·`) mid-character. `C.UTF-8` is used because it is built into glibc on Ubuntu 22.04+ and needs no `locale-gen`, unlike `en_US.UTF-8`.
 
 ---
 
 ## Deployment
 
-### chezmoi Integration
+`run_onchange_after_install-motd.sh.tmpl` at the repository root deploys the dashboard. It only renders on `srv1`, and it re-runs whenever `10-dashboard` or `common.sh` changes (their hashes are embedded in the script). It:
 
-The MOTD scripts are stored in the chezmoi source directory and deployed via a run script.
+1. Moves every entry in `/etc/update-motd.d` that isn't part of this dashboard (the stock Ubuntu scripts) into `/etc/update-motd.d.original`. Moving is used rather than `chmod -x`, because dpkg doesn't recreate a conffile the admin has deleted, but it can restore a conffile's mode when a package upgrade ships a new version.
+2. Removes files from earlier versions of this dashboard (`00-header` and `10-system-health`, identified by their "Part of custom MOTD dashboard" header).
+3. Installs `10-dashboard` (755) and `lib/common.sh` (644), owned by root.
 
-#### Source Structure
+The `motd/` folder is listed in `.chezmoiignore`, so chezmoi doesn't also copy it into the home directory.
 
-```
-~/.local/share/chezmoi/
-├── motd/
-│   ├── lib/
-│   │   └── common.sh         # Shared functions, colors, icons
-│   ├── 00-header
-│   ├── 10-system-health
-│   ├── 20-updates
-│   ├── 30-docker
-│   └── 40-users
-└── run_onchange_after_install-motd.sh.tmpl
-```
-
-#### Deployment Script Features
-
-The `run_onchange_after_install-motd.sh.tmpl` script:
-
-1. Only runs on Linux (skips macOS)
-2. Creates one-time backup of original scripts to `/etc/update-motd.d.original`
-3. Disables default Ubuntu MOTD scripts (removes execute permission)
-4. Copies custom scripts to `/etc/update-motd.d/`
-5. Sets correct ownership (root:root) and permissions (755)
-6. Re-runs when any motd script content changes (via hash comment)
-
-#### Scripts to Disable
-
-Remove execute permission from these default scripts:
-
-- `00-header`
-- `10-help-text`
-- `50-landscape-sysinfo`
-- `50-motd-news`
-- `85-fwupd`
-- `90-updates-available`
-- `91-contract-ua-esm-status`
-- `91-release-upgrade`
-- `92-unattended-upgrades`
-- `95-hwe-eol`
-- `97-overlayroot`
-- `98-fsck-at-reboot`
-- `98-reboot-required`
-
-### Dependencies
-
-| Package | Purpose | Install Command |
-|---------|---------|-----------------|
-| `fail2ban` | Failed login tracking | `sudo apt install fail2ban` |
-| `curl` | Public IP detection | Usually pre-installed |
-| `tailscale` | Tailscale IP (optional) | Via Tailscale install script |
-
-### Testing
-
-```bash
-# Test a single script
-sudo /etc/update-motd.d/00-header
-
-# Test all MOTD scripts in order
-sudo run-parts /etc/update-motd.d/
-
-# Force refresh on next SSH login
-sudo rm /var/run/motd.dynamic
-```
+To restore the stock MOTD, move the scripts in `/etc/update-motd.d.original` back.
 
 ### Permissions
 
-All scripts in `/etc/update-motd.d/` must have:
-
-- Owner: `root:root`
-- Permissions: `755` (rwxr-xr-x)
+- `10-dashboard`: `root:root`, `755`
+- `lib/common.sh`: `root:root`, `644` (sourced, never executed; `run-parts` ignores directories)
 
 ---
 
-## Future Enhancements
+## Testing
 
-Potential additions for later versions:
+```bash
+# Render as root, exactly as at login
+sudo /etc/update-motd.d/10-dashboard
 
-1. **Temperature monitoring**: CPU/disk temperatures if sensors available
-2. **Service status**: Check status of critical systemd services
-3. **Backup status**: Last backup time from backup service
-4. **SSL certificate expiry**: Days until certificates expire
-5. **ZFS pool status**: If using ZFS, show pool health
-6. **Fail2ban summary**: Total bans, currently banned IPs
+# Run everything pam_motd runs
+sudo run-parts --lsbsysinit /etc/update-motd.d/
+
+# Check the width rule (strip colour, print over-long lines)
+sudo /etc/update-motd.d/10-dashboard | sed 's/\x1b\[[0-9;]*m//g' | awk 'length > 60'
+```
+
+Running as a normal user works too, but skips the root-only helpers (release upgrade, fsck) and can't write the public IP cache.

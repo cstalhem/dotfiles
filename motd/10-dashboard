@@ -1,0 +1,394 @@
+#!/bin/bash
+
+#
+# 10-dashboard - Login dashboard: identity, health panel, alerts
+# Part of custom MOTD dashboard
+#
+# Quiet when healthy, loud when not. See README.md for the design rules.
+#
+
+# ==============================================================================
+# Source common functions
+# ==============================================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
+# ==============================================================================
+# Configuration
+# ==============================================================================
+
+NICKNAME="Home Server"
+
+# Mount points shown as bars, and their labels (at most 6 characters).
+# Other local filesystems are not shown, but raise an alert at >= 85%.
+MOUNT_POINTS=("/" "/mnt/media_data")
+declare -A MOUNT_LABELS=(
+    ["/"]="/"
+    ["/mnt/media_data"]="media"
+)
+
+# Public IP cache settings
+# /run is tmpfs and root-owned (unlike /tmp, which is world-writable), so the
+# cache resets on reboot -- acceptable, and preferable to a world-writable path.
+PUBLIC_IP_CACHE_FILE="/run/motd-public-ip"
+PUBLIC_IP_CACHE_TTL=900  # 15 minutes in seconds
+
+# ==============================================================================
+# Helper Functions
+# ==============================================================================
+
+# Get compact uptime, e.g. "1d 16h", "3h 12m" or "12m"
+get_uptime() {
+    local s
+    s=$(cut -d. -f1 /proc/uptime)
+    local d=$((s / 86400)) h=$((s % 86400 / 3600)) m=$((s % 3600 / 60))
+
+    if [ "$d" -gt 0 ]; then
+        echo "${d}d ${h}h"
+    elif [ "$h" -gt 0 ]; then
+        echo "${h}h ${m}m"
+    else
+        echo "${m}m"
+    fi
+}
+
+# Get the hottest thermal zone in whole degrees C (same source as Ubuntu's
+# landscape-sysinfo); prints nothing if no zone is readable
+get_temperature() {
+    local f t max=0
+    for f in /sys/class/thermal/thermal_zone*/temp; do
+        { read -r t < "$f"; } 2>/dev/null || continue
+        [ "$t" -gt "$max" ] && max=$t
+    done
+    [ "$max" -gt 0 ] && echo $((max / 1000))
+}
+
+# Get "used avail size" in bytes for a mount point. Gives up after 2 seconds
+# so an unreachable network share can't block the login: read -t times out
+# even if df is stuck in the kernel, where no signal (and so no `timeout`)
+# could stop it.
+get_disk_usage() {
+    local line
+    read -r -t 2 line < <(df -B1 --output=used,avail,size "$1" 2>/dev/null | tail -1)
+    [[ "$line" =~ ^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+$ ]] && echo "$line"
+}
+
+# Disk percentage exactly as GNU df's Use%: used / (used + avail), which
+# excludes the root-reserved blocks, rounded up
+# Usage: disk_percent <used> <avail>
+disk_percent() {
+    local nonreserved=$(($1 + $2))
+    [ "$nonreserved" -gt 0 ] || { echo 0; return; }
+    echo $(( ($1 * 100 + nonreserved - 1) / nonreserved ))
+}
+
+# Get local IP address
+get_local_ip() {
+    local ip
+    ip=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[\d.]+' | head -1)
+    if [ -z "$ip" ]; then
+        ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    fi
+    echo "$ip"
+}
+
+# Get public IP with caching to avoid repeated network calls
+get_public_ip() {
+    local cache_file="$PUBLIC_IP_CACHE_FILE"
+    local cache_ttl="$PUBLIC_IP_CACHE_TTL"
+
+    # Check if cache exists and is still valid
+    if [ -f "$cache_file" ]; then
+        local cache_age
+        cache_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0)))
+        if [ "$cache_age" -lt "$cache_ttl" ]; then
+            cat "$cache_file"
+            return 0
+        fi
+    fi
+
+    # Fetch fresh IP and update cache. Anything that isn't an address (e.g. a
+    # captive portal's HTML) is discarded rather than printed.
+    local ip
+    ip=$(curl -s --max-time 2 ipinfo.io/ip 2>/dev/null)
+    if [[ "$ip" =~ ^[0-9a-fA-F.:]+$ ]]; then
+        { echo "$ip" > "$cache_file"; } 2>/dev/null
+        echo "$ip"
+    fi
+}
+
+# Print the first non-empty line of stdin
+first_line() {
+    grep -m1 -v '^[[:space:]]*$'
+}
+
+# ==============================================================================
+# Header
+# ==============================================================================
+
+HOSTNAME_SHORT=$(hostname -s 2>/dev/null || hostname)
+OS_INFO=$(source /etc/os-release 2>/dev/null; echo "$PRETTY_NAME")
+OS_INFO="${OS_INFO:-Unknown OS}"
+UPTIME="up $(get_uptime)"
+
+title_rest=" · ${NICKNAME}"
+title_len=$((${#HOSTNAME_SHORT} + ${#title_rest}))
+printf '%s%s%s%s%*s%s\n' "$BOLD" "$HOSTNAME_SHORT" "$RESET" "$title_rest" \
+    $((WIDTH - title_len - ${#UPTIME})) '' "$UPTIME"
+os_line="${OS_INFO} · $(uname -sr)"
+printf '%s%s%s\n' "$DIM" "${os_line:0:WIDTH}" "$RESET"
+rule
+
+# ==============================================================================
+# Panel: load, temperature, processes, docker
+# ==============================================================================
+
+read -r load_1m load_5m load_15m _ < /proc/loadavg
+cpu_cores=$(nproc)
+
+# Judged on the 5-minute average: the 1-minute one spikes from the login itself
+load_status=$(awk -v l="$load_5m" -v c="$cpu_cores" \
+    'BEGIN { r = l / c; print (r >= 1.0 ? "crit" : r >= 0.7 ? "warn" : "ok") }')
+
+temp_c=$(get_temperature)
+temp_status=ok
+[ -n "$temp_c" ] && temp_status=$(level "$temp_c" 80 90)
+
+pair_row "$load_status" "load" "${load_1m} ${load_5m} ${load_15m} (${cpu_cores}c)" \
+    "$temp_status" "${temp_c:+temp}" "${temp_c}°C"
+
+# One ps call for both the process count and the zombies
+read -r proc_count zombie_count < <(ps -eo stat= | awk '{ n++ } /^Z/ { z++ } END { print n, z + 0 }')
+procs_status=ok
+procs_value="$proc_count"
+if [ "$zombie_count" -gt 0 ]; then
+    procs_status=warn
+    procs_value+=" · ${zombie_count} zombie"
+    [ "$zombie_count" -gt 1 ] && procs_value+="s"
+fi
+
+# Docker: count running and healthy; remember names of containers in trouble
+# for the alert block. Exit code 0 is a finished job, not a failure.
+docker_status=ok
+docker_value=""
+unhealthy=()
+restarting=()
+failed=()
+if command_exists docker; then
+    if docker_ps=$(timeout 2 docker ps -a --format '{{.Names}}'$'\t''{{.State}}'$'\t''{{.Status}}' 2>/dev/null); then
+        running=0
+        healthy=0
+        while IFS=$'\t' read -r name state status; do
+            case "$state" in
+                running)
+                    running=$((running + 1))
+                    [[ "$status" == *"(healthy)"* ]] && healthy=$((healthy + 1))
+                    [[ "$status" == *"(unhealthy)"* ]] && unhealthy+=("$name")
+                    ;;
+                restarting)
+                    restarting+=("$name")
+                    ;;
+                exited|dead)
+                    [[ "$status" =~ ^Exited\ \(([0-9]+)\) ]] && [ "${BASH_REMATCH[1]}" -ne 0 ] && failed+=("$name")
+                    [ "$state" = dead ] && failed+=("$name")
+                    ;;
+            esac
+        done <<< "$docker_ps"
+
+        if [ "${#unhealthy[@]}" -gt 0 ]; then
+            docker_status=crit
+            docker_value="${running} · ${#unhealthy[@]} unhealthy"
+        elif [ "$healthy" -gt 0 ]; then
+            docker_value="${running} · ${healthy} healthy"
+        else
+            docker_value="${running} running"
+        fi
+        [ "${#restarting[@]}" -gt 0 ] && docker_status=crit
+    else
+        docker_status=crit
+        docker_value="not running"
+    fi
+fi
+
+pair_row "$procs_status" "procs" "$procs_value" \
+    "$docker_status" "${docker_value:+docker}" "$docker_value"
+
+echo ""
+
+# ==============================================================================
+# Panel: memory and storage bars
+# ==============================================================================
+
+while read -r key value _; do
+    case "$key" in
+        MemTotal:)     mem_total=$value ;;
+        MemAvailable:) mem_avail=$value ;;
+        SwapTotal:)    swap_total=$value ;;
+        SwapFree:)     swap_free=$value ;;
+    esac
+done < /proc/meminfo
+
+ram_used=$((mem_total - mem_avail))
+ram_percent=$((ram_used * 100 / mem_total))
+ram_status=$(level "$ram_percent" 70 85)
+bar_row "$ram_status" "ram" "$ram_percent" $((ram_used * 1024)) $((mem_total * 1024))
+
+# Swap in use is normal on Linux (idle pages get moved out), so it is only
+# judged when RAM itself is under pressure
+if [ "$swap_total" -gt 0 ]; then
+    swap_used=$((swap_total - swap_free))
+    swap_percent=$((swap_used * 100 / swap_total))
+    swap_status=ok
+    [ "$ram_status" != ok ] && swap_status=$(level "$swap_percent" 50 75)
+    bar_row "$swap_status" "swap" "$swap_percent" $((swap_used * 1024)) $((swap_total * 1024))
+fi
+
+for mount_point in "${MOUNT_POINTS[@]}"; do
+    label=${MOUNT_LABELS[$mount_point]:-$mount_point}
+    if read -r used avail size <<< "$(get_disk_usage "$mount_point")" && [ -n "$size" ]; then
+        percent=$(disk_percent "$used" "$avail")
+        bar_row "$(level "$percent" 70 85)" "$label" "$percent" "$used" "$size"
+    else
+        pair_row warn "$label" "unreachable"
+    fi
+done
+
+echo ""
+
+# ==============================================================================
+# Panel: network
+# ==============================================================================
+
+local_ip=$(get_local_ip)
+lan_status=ok
+[ -z "$local_ip" ] && lan_status=warn && local_ip="unable to detect"
+
+tailnet_status=ok
+tailnet_value=""
+if command_exists tailscale; then
+    tailnet_value=$(timeout 2 tailscale ip -4 2>/dev/null | head -1)
+    [ -z "$tailnet_value" ] && tailnet_status=warn && tailnet_value="not connected"
+fi
+
+public_ip=$(get_public_ip)
+wan_status=ok
+[ -z "$public_ip" ] && wan_status=warn && public_ip="unable to detect"
+
+pair_row "$lan_status" "lan" "$local_ip" "$tailnet_status" "${tailnet_value:+tailnet}" "$tailnet_value"
+pair_row "$wan_status" "wan" "$public_ip"
+
+# ==============================================================================
+# Alerts (crit first, then warn; each group in order of importance)
+# ==============================================================================
+
+# Containers
+[ "${#unhealthy[@]}" -gt 0 ] && alert crit "unhealthy: $(join_list "${unhealthy[@]}")"
+[ "${#restarting[@]}" -gt 0 ] && alert crit "restarting: $(join_list "${restarting[@]}")"
+
+# Updates, from the stamp that apt's update-notifier hook writes after each
+# `apt update` (so no apt call happens at login)
+updates_stamp=/var/lib/update-notifier/updates-available
+updates_total=0
+updates_security=0
+if [ -r "$updates_stamp" ]; then
+    updates_text=$(< "$updates_stamp")
+    total_re='([0-9]+) updates? can be applied immediately'
+    security_re='([0-9]+) of these updates (is a|are) standard security'
+    [[ "$updates_text" =~ $total_re ]] && updates_total=${BASH_REMATCH[1]}
+    [[ "$updates_text" =~ $security_re ]] && updates_security=${BASH_REMATCH[1]}
+fi
+if [ "$updates_security" -gt 0 ]; then
+    alert crit "${updates_security} security update$([ "$updates_security" -gt 1 ] && echo s) · sudo apt upgrade"
+fi
+
+# Local filesystems that aren't shown as bars (e.g. a /boot filling up with
+# old kernels). Network filesystems are left out: only configured mounts are
+# worth the risk of touching a share at login.
+declare -A shown_mounts=()
+for mount_point in "${MOUNT_POINTS[@]}"; do
+    shown_mounts[$mount_point]=1
+done
+while read -r target; do
+    [ -n "${shown_mounts[$target]}" ] && continue
+    read -r used avail size <<< "$(get_disk_usage "$target")"
+    [ -n "$size" ] || continue
+    percent=$(disk_percent "$used" "$avail")
+    [ "$percent" -ge 85 ] && alert crit "${target} is ${percent}% full ·$(size_pair "$used" "$size")"
+done < <(findmnt -rn -t ext2,ext3,ext4,xfs,btrfs,zfs,vfat -o TARGET 2>/dev/null)
+
+# Reboot required
+if [ -f /var/run/reboot-required ]; then
+    reboot_pkg=$(head -1 /var/run/reboot-required.pkgs 2>/dev/null)
+    alert warn "reboot required${reboot_pkg:+ (${reboot_pkg})}"
+fi
+
+# Failed SSH logins in the last 24h. The box is only reachable via LAN and
+# Tailscale, so every failure comes from inside and each one is worth seeing.
+# Counted once per connection, by the line sshd logs when it gives up on one.
+if command_exists journalctl; then
+    mapfile -t failed_sources < <(timeout 2 journalctl -u ssh --since "24 hours ago" -o cat 2>/dev/null |
+        grep -oP '(Connection closed by|Disconnected from|Disconnecting) (authenticating|invalid) user \S+ \K[0-9a-fA-F.:]+(?= port)')
+    if [ "${#failed_sources[@]}" -gt 0 ]; then
+        mapfile -t sources < <(printf '%s\n' "${failed_sources[@]}" | sort -u)
+        alert warn "${#failed_sources[@]} failed ssh login$([ "${#failed_sources[@]}" -gt 1 ] && echo s) (24h) · $(join_list "${sources[@]}")"
+    fi
+fi
+
+# Other users logged in
+mapfile -t users < <(who | awk '{ print $1 }' | sort -u)
+[ "${#users[@]}" -gt 1 ] && alert warn "${#users[@]} users logged in: $(join_list "${users[@]}")"
+
+# Containers that exited with an error
+[ "${#failed[@]}" -gt 0 ] && alert warn "exited with error: $(join_list "${failed[@]}")"
+
+# Non-security updates, and whether the update list itself is stale
+updates_other=$((updates_total - updates_security))
+if [ "$updates_other" -gt 0 ]; then
+    other_label="updates"
+    [ "$updates_other" -eq 1 ] && other_label="update"
+    [ "$updates_security" -gt 0 ] && other_label="other ${other_label}"
+    alert warn "${updates_other} ${other_label} · apt list --upgradable"
+fi
+if [ -e "$updates_stamp" ] && [ -z "$(find "$updates_stamp" -newermt 'now-7 days' 2>/dev/null)" ]; then
+    stamp_days=$(( ($(date +%s) - $(stat -c %Y "$updates_stamp")) / 86400 ))
+    alert warn "update list is ${stamp_days} days old · sudo apt update"
+fi
+
+# Packages unattended-upgrades could not install
+if [ -s /var/lib/unattended-upgrades/kept-back ]; then
+    kept_back=$(wc -w < /var/lib/unattended-upgrades/kept-back)
+    alert warn "${kept_back} update$([ "$kept_back" -gt 1 ] && echo s) kept back by unattended-upgrades"
+fi
+
+# The notices below come from Ubuntu helpers that refresh their own stamp
+# files when called, so they are called here (with the same guards as the
+# stock scripts they replace) rather than read from the stamps directly.
+
+# Filesystem check scheduled for next boot
+if [ "$EUID" -eq 0 ] && [ -x /usr/lib/update-notifier/update-motd-fsck-at-reboot ]; then
+    while read -r line; do
+        [[ "$line" =~ ^\*\*\*\ (.*)\ \*\*\*$ ]] && alert warn "${BASH_REMATCH[1]}"
+    done < <(/usr/lib/update-notifier/update-motd-fsck-at-reboot 2>/dev/null)
+fi
+
+# Firmware updates (fwupd writes this file itself)
+fwupd_notice=$(first_line < /run/motd.d/85-fwupd 2>/dev/null)
+[ -n "$fwupd_notice" ] && alert warn "$fwupd_notice"
+
+# Hardware enablement stack end of life
+hwe_stamp=/var/lib/update-notifier/hwe-eol
+if [ -n "$(find "$hwe_stamp" -newermt 'now-1 days' 2>/dev/null)" ] && [ -x /usr/lib/update-notifier/update-motd-hwe-eol ]; then
+    hwe_notice=$(/usr/lib/update-notifier/update-motd-hwe-eol 2>/dev/null | first_line)
+    [ -n "$hwe_notice" ] && alert warn "$hwe_notice"
+fi
+
+# New Ubuntu release
+if [ "$EUID" -eq 0 ] && [ -x /usr/lib/ubuntu-release-upgrader/release-upgrade-motd ]; then
+    release_notice=$(/usr/lib/ubuntu-release-upgrader/release-upgrade-motd 2>/dev/null)
+    release_re="New release '([^']+)' available"
+    [[ "$release_notice" =~ $release_re ]] && alert warn "Ubuntu ${BASH_REMATCH[1]} available · do-release-upgrade"
+fi
+
+print_alerts

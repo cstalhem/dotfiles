@@ -1,0 +1,47 @@
+{{- if eq .chezmoi.hostname "srv1" -}}
+#!/bin/bash
+
+#
+# Deploy the MOTD dashboard to /etc/update-motd.d (see motd/README.md)
+#
+# chezmoi re-runs this script whenever its rendered content changes, so the
+# hashes below make it re-run whenever a dashboard file changes:
+# 10-dashboard {{ include "motd/10-dashboard" | sha256sum }}
+# common.sh    {{ include "motd/lib/common.sh" | sha256sum }}
+#
+
+set -euo pipefail
+shopt -s nullglob
+
+SRC={{ joinPath .chezmoi.sourceDir "motd" | quote }}
+DEST=/etc/update-motd.d
+BACKUP=/etc/update-motd.d.original
+OURS=(10-dashboard lib)
+
+echo "Installing MOTD dashboard to ${DEST} (needs sudo)"
+
+sudo mkdir -p "$BACKUP"
+
+# Everything in DEST that isn't ours: files from earlier versions of this
+# dashboard are removed, anything else (the stock Ubuntu scripts) is moved to
+# BACKUP. Moving rather than chmod -x, because dpkg won't recreate a deleted
+# conffile but can restore a conffile's mode on upgrade. Directories are
+# skipped: run-parts ignores them.
+for entry in "$DEST"/*; do
+    name=$(basename "$entry")
+    [[ " ${OURS[*]} " == *" ${name} "* ]] && continue
+    [ -d "$entry" ] && [ ! -L "$entry" ] && continue
+
+    if grep -qs "Part of custom MOTD dashboard" "$entry"; then
+        echo "  removing old dashboard file ${name}"
+        sudo rm -f "$entry"
+    else
+        echo "  moving stock ${name} to ${BACKUP}"
+        sudo mv -f "$entry" "$BACKUP/"
+    fi
+done
+
+sudo install -o root -g root -m 755 "$SRC/10-dashboard" "$DEST/10-dashboard"
+sudo install -o root -g root -m 755 -d "$DEST/lib"
+sudo install -o root -g root -m 644 "$SRC/lib/common.sh" "$DEST/lib/common.sh"
+{{ end -}}
